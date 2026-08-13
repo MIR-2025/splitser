@@ -60,7 +60,10 @@ function hostOf(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } c
 function fillScript(user, pass) {
   return `(function(u,p){
     function fire(el){['input','change','keyup','blur'].forEach(function(t){el.dispatchEvent(new Event(t,{bubbles:true}));});}
-    function set(el,v){ if(!el||v==null) return false; try{el.focus();}catch(e){} el.value=v; fire(el); return true; }
+    // set the value through the NATIVE setter, bypassing React/Vue's overridden value tracker, so
+    // the framework sees a real change and re-runs validation (otherwise submit buttons stay disabled)
+    function nset(el,v){ try{var pr=(el.tagName==='TEXTAREA'?window.HTMLTextAreaElement:window.HTMLInputElement).prototype; var d=Object.getOwnPropertyDescriptor(pr,'value'); if(d&&d.set){d.set.call(el,v);return;}}catch(e){} el.value=v; }
+    function set(el,v){ if(!el||v==null) return false; try{el.focus();}catch(e){} nset(el,v); fire(el); return true; }
     var pw=document.querySelector('input[type=password]:not([disabled]):not([readonly])');
     var user=null, inputs=[].slice.call(document.querySelectorAll('input'));
     if(pw){ var pi=inputs.indexOf(pw);
@@ -144,6 +147,39 @@ function showChooser(pane, ms) {
   pane.el.appendChild(box);
   box.addEventListener('mousedown', (ev) => { const it = ev.target.closest('.vc-item'); if (!it) return; ev.preventDefault(); fill(pane.view, ms[+it.dataset.i]); box.remove(); });
   setTimeout(() => document.addEventListener('mousedown', function h(e) { if (!box.contains(e.target)) { box.remove(); document.removeEventListener('mousedown', h); } }), 0);
+}
+
+// ---- autofill dropdown: offered when a login field is focused (webview-preload -> ipc-message).
+// Anchored under the field; click a row to fill both username + password into the page. ----
+let fillTimer = null, suppressFill = 0;
+function hideFill() {
+  clearTimeout(fillTimer);
+  fillTimer = setTimeout(() => document.querySelectorAll('.vault-fill').forEach((b) => b.remove()), 150);  // delay so a click on it lands
+}
+function offerFill(pane, data) {
+  clearTimeout(fillTimer);
+  document.querySelectorAll('.vault-fill').forEach((b) => b.remove());
+  if (!unlocked() || Date.now() < suppressFill) return;           // locked, or we just filled (fill re-focuses the field)
+  const ms = matchesForUrl(pane.view.getURL());
+  if (!ms.length) return;
+  const box = document.createElement('div');
+  box.className = 'vault-fill';
+  box.innerHTML = ms.map((e, i) => `<div class="vf-item" data-i="${i}"><span class="vf-k">&#128273;</span><span class="vf-main"><b>${esc(e.username || e.name)}</b><span class="vf-sub">${esc(e.name || hostOf(e.url) || e.url)}</span></span></div>`).join('');
+  box.addEventListener('mousedown', (ev) => {
+    const it = ev.target.closest('.vf-item'); if (!it) return;
+    ev.preventDefault(); armLock(); suppressFill = Date.now() + 900;
+    fill(pane.view, ms[+it.dataset.i]); box.remove();
+  });
+  pane.el.appendChild(box);
+  // anchor under the field (rect is in the webview's viewport px; scale by the pane's zoom)
+  const z = pane.activeTab ? (pane.activeTab.zoom || 1) : 1;
+  const vb = pane.viewsBox, r = (data && data.rect) || { x: 16, y: 80, w: 220, h: 20 };
+  let left = vb.offsetLeft + r.x * z;
+  let top = vb.offsetTop + r.y * z + 2;
+  left = Math.max(6, Math.min(left, pane.el.clientWidth - box.offsetWidth - 6));
+  if (top + box.offsetHeight > pane.el.clientHeight - 6) top = Math.max(vb.offsetTop + 6, vb.offsetTop + (r.y - r.h) * z - box.offsetHeight - 4);  // flip above
+  box.style.left = left + 'px';
+  box.style.top = top + 'px';
 }
 
 async function captureFromPane(pane) {
@@ -330,5 +366,5 @@ export const Vault = {
     bodyEl.addEventListener('mousedown', armLock, true);
     return load();
   },
-  refreshPaneKey, fillPane, unlocked, togglePanel, offerSave
+  refreshPaneKey, fillPane, unlocked, togglePanel, offerSave, offerFill, hideFill
 };

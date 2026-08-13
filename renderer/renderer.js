@@ -167,11 +167,15 @@ function addTab(pane, url) {
   view.addEventListener('did-start-loading', () => { tab.loading = true; tabEl.classList.add('loading'); if (active()) pane.spin.hidden = false; });
   view.addEventListener('did-stop-loading', () => { tab.loading = false; tabEl.classList.remove('loading'); if (active()) { pane.spin.hidden = true; pane.syncAddr(); } const u = view.getURL(); if (/^https?:/.test(u)) api.historyAdd({ url: u, title: tab.title }); });
   view.addEventListener('page-title-updated', (e) => { tab.title = e.title || tab.url; ttitle.textContent = tab.title; tabEl.title = tab.title; if (active()) updateTitle(); });
-  view.addEventListener('page-favicon-updated', (e) => { const f = (e.favicons || [])[0]; if (f) { tab.favicon = f; tfav.src = f; tfav.hidden = false; if (active()) { pane.fav.src = f; pane.fav.hidden = false; } } });
+  view.addEventListener('page-favicon-updated', (e) => { const f = (e.favicons || [])[0]; if (f) { tab.favicon = f; tfav.src = f; tfav.hidden = false; if (active()) { pane.fav.src = f; pane.fav.hidden = false; renderSetbar(); } } });
   view.addEventListener('update-target-url', (e) => { hoverEl.textContent = e.url || ''; });
   view.addEventListener('found-in-page', (e) => { if (active()) { const r = e.result; pane.findCount.textContent = r.matches ? r.activeMatchOrdinal + '/' + r.matches : 'no matches'; } });
   view.addEventListener('media-started-playing', () => { tab.audio = true; if (active()) pane.muteBtn.hidden = false; });
-  view.addEventListener('ipc-message', (e) => { if (e.channel === 'vault:capture') Vault.offerSave(pane, e.args[0]); });  // "save this login?" from the webview preload
+  view.addEventListener('ipc-message', (e) => {                               // signals from the webview preload
+    if (e.channel === 'vault:capture') Vault.offerSave(pane, e.args[0]);       // login submitted -> "save this?"
+    else if (e.channel === 'vault:loginfocus') Vault.offerFill(pane, e.args[0]); // login field focused -> "prefill?"
+    else if (e.channel === 'vault:loginblur') Vault.hideFill(pane);
+  });
   tfav.addEventListener('error', () => { tfav.hidden = true; });
 
   pane.tabs.push(tab);
@@ -368,11 +372,15 @@ function closeSet(s) {
   saveSession();
 }
 function renderSetbar() {
-  setbar.innerHTML = sets.map((s, i) =>
-    '<button class="setpill' + (s === cur ? ' on' : '') + '" data-i="' + i + '" title="Set ' + (i + 1) + '">' + (i + 1) +
-    (sets.length > 1 ? '<span class="setclose" data-i="' + i + '" title="Close set">&#215;</span>' : '') +
-    '</button>').join('') +
-    '<button class="setadd" title="New set (Ctrl+T)">+</button>';
+  setbar.innerHTML = sets.map((s, i) => {
+    const favs = s.panes.map((p) => p.activeTab && p.activeTab.favicon).filter(Boolean);
+    const favHtml = favs.slice(0, 4).map((f) => '<img class="setfav" src="' + f.replace(/"/g, '&quot;') + '" alt="" />').join('') +
+      (favs.length > 4 ? '<span class="setmore">+' + (favs.length - 4) + '</span>' : '');
+    return '<button class="setpill' + (s === cur ? ' on' : '') + '" data-i="' + i + '" title="Set ' + (i + 1) + '">' +
+      favHtml + '<span class="setnum">' + (i + 1) + '</span>' +
+      (sets.length > 1 ? '<span class="setclose" data-i="' + i + '" title="Close set">&#215;</span>' : '') +
+      '</button>';
+  }).join('') + '<button class="setadd" title="New set (Ctrl+T)">+</button>';
 }
 setbar.addEventListener('click', (e) => {
   if (e.target.closest('.setadd')) return newSet();
