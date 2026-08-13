@@ -21,14 +21,16 @@ cookies, reaches framebusting sites, no header-stripping, and it can autofill.
   its cell count.
 - **Resizable everywhere:** every internal border drags. Columns have vertical gutters; the
   2×2 / 3×3 grids have draggable dividers on **both** axes (a column divider resizes that
-  column across all rows, a row divider resizes that row across all columns). Sizes persist
-  per layout. Dragging works over a page because a full-window shield overlays the webviews
-  for the duration of the drag.
+  column across all rows, a row divider resizes that row across all columns), plus a
+  **diagonal handle at each divider crossing** that reproportions both axes in one drag.
+  Sizes persist per layout. Dragging works over a page because a full-window shield overlays
+  the webviews for the duration of the drag.
 - **Sets (workspaces):** a *set* is a whole independent grid of panes with its own layout.
   `Ctrl+T` (or the `+` in the top set-bar) opens a **new set** — a fresh two-pane grid — and
   switches to it; click a numbered pill to switch, its `×` to close a set. Each set stays in
   the DOM while you're on another (hidden, **webviews kept alive** — audio keeps playing,
-  page state is preserved). Every set's layout, panes, tabs, and the active set all restore
+  page state is preserved). Each pill shows the favicons of the sites in that set, so sets are
+  identifiable at a glance. Every set's layout, panes, tabs, and the active set all restore
   with the session. This is the three-level hierarchy: **sets → panes → tabs**.
 - **Panes:** split (toolbar `+`) / close (toolbar `×`), within the current set.
 - **Tabs per pane:** every pane has its own tab strip — new tab (strip `+`), close tab
@@ -63,8 +65,12 @@ cookies, reaches framebusting sites, no header-stripping, and it can autofill.
   rest (`vault.enc`). Wrong master password = GCM auth-fail on decrypt (no password hash stored).
 - Open with `Ctrl+K` or the `🔑` status button: create/unlock, search, add, generate,
   copy user/pass (clipboard auto-clears ~25 s), delete, "From current page" capture, CSV import.
-- **Autofill** — the `🔑` on a pane fills the matching login into the page (chooser if
-  multiple match). *This is what the extension structurally cannot do.*
+- **Autofill** — focus a username/password field and a dropdown of matching saved logins
+  appears **anchored under the field**; click one to fill both username + password (the `🔑`
+  status button also fills the active pane, with a chooser when several match). Values are set
+  through the native input setter so **React/Vue forms register the change and enable their
+  submit button** — that's why logins like Stripe fill correctly. *This is what the extension
+  structurally cannot do.*
 - **Offer to save** — when you submit a login in any pane, Splitser offers to save it: an
   in-pane bar (`Save password for <host>?`) appears, or `Update…?` if the password changed,
   and it stays quiet if that login is already stored. A tiny per-webview preload (set from
