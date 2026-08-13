@@ -19,10 +19,14 @@ cookies, reaches framebusting sites, no header-stripping, and it can autofill.
   3×3 grid layouts**. Switch with the status-bar picker or `Ctrl+1` (columns) / `Ctrl+2` (2×2)
   / `Ctrl+3` (3×3); the choice persists across launches, and switching to a grid tops up to
   its cell count.
-- add / split (`+` or `Ctrl+T`) / close (`×` or `Ctrl+W`).
+- **Panes:** split (toolbar `+`) / close (toolbar `×`). Resize by dragging the gutter.
+- **Tabs per pane:** every pane has its own tab strip — new tab (strip `+` or `Ctrl+T`), close
+  tab (tab `×` or `Ctrl+W`; closing the last tab closes the pane), click a tab to switch.
+  Each tab is a real live `<webview>`; background tabs stay alive (hidden, not destroyed), so
+  audio keeps playing and state is preserved. Tabs restore with the session.
 - Per-pane toolbar: back / forward / reload, favicon, address bar, bookmark star, split, close.
 - `target=_blank` / `window.open` opens a **new pane**, not an OS window.
-- **Roadmap:** arbitrary / resizable 2-D splits; per-pane tabs; workspaces (named, saved layouts).
+- **Roadmap:** arbitrary / resizable 2-D splits; workspaces (named, saved layouts).
 
 ## Navigation — Built
 - Address bar: URL or search (configurable engine). Real per-pane back / forward / reload / history.

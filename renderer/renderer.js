@@ -46,19 +46,18 @@ const FINDBAR = `
     <button class="find-btn find-close" title="Close (Esc)">&#215;</button>
   </div>`;
 
-function makePane(url, beforeEl = null) {
+function makePane(url, beforeEl = null, tabUrls = null) {
   url = url || SETTINGS.home;
   const el = document.createElement('section');
   el.className = 'pane';
   el.style.flexGrow = '1';
-  el.innerHTML = BAR + FINDBAR + '<div class="suggest" hidden></div>' +
-    '<webview class="view" partition="persist:split" allowpopups></webview>';
+  el.innerHTML = '<div class="tabstrip"><button class="newtab" title="New tab">+</button></div>' +
+    BAR + FINDBAR + '<div class="suggest" hidden></div><div class="views"></div>';
   grid.insertBefore(el, beforeEl);
 
-  const view = el.querySelector('.view');
   const addr = el.querySelector('.addr');
-  const spin = el.querySelector('.spin');
   const fav = el.querySelector('.fav');
+  const spin = el.querySelector('.spin');
   const star = el.querySelector('.star');
   const keyBtn = el.querySelector('.key');
   const muteBtn = el.querySelector('.mute');
@@ -66,96 +65,131 @@ function makePane(url, beforeEl = null) {
   const findbar = el.querySelector('.findbar');
   const findInput = el.querySelector('.find-input');
   const findCount = el.querySelector('.find-count');
-  const pane = { el, view, addr, star, title: '', zoom: 1, muted: false, sugIdx: -1, sugs: [] };
+  const tabstrip = el.querySelector('.tabstrip');
+
+  const pane = {
+    el, addr, star, keyBtn, tabstrip, fav, spin, muteBtn, findbar, findInput, findCount,
+    viewsBox: el.querySelector('.views'), tabs: [], activeTab: null, sugIdx: -1, sugs: [],
+    get view() { return this.activeTab ? this.activeTab.view : null; },
+    get title() { return this.activeTab ? this.activeTab.title : ''; },
+    get zoom() { return this.activeTab ? this.activeTab.zoom : 1; }
+  };
   panes.push(pane);
-  view.setAttribute('src', url);
 
-  const syncAddr = () => { const u = view.getURL(); if (u && u !== 'about:blank' && document.activeElement !== addr) addr.value = u; };
-
-  // ---- address bar + history autocomplete ----
-  let sugTimer;
-  addr.addEventListener('input', () => {
-    clearTimeout(sugTimer);
-    const q = addr.value;
-    if (!q) return hideSuggest(pane);
-    sugTimer = setTimeout(async () => {
-      if (document.activeElement !== addr) return;
-      pane.sugs = await api.historyQuery(q);
-      renderSuggest(pane);
-    }, 110);
-  });
-  addr.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowDown') { e.preventDefault(); moveSuggest(pane, 1); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); moveSuggest(pane, -1); }
-    else if (e.key === 'Enter') {
-      const chosen = pane.sugIdx >= 0 && pane.sugs[pane.sugIdx] ? pane.sugs[pane.sugIdx].url : normalize(addr.value);
-      hideSuggest(pane); if (chosen) view.loadURL(chosen); view.focus();
-    } else if (e.key === 'Escape') { hideSuggest(pane); }
-  });
-  addr.addEventListener('focus', () => { activePane = pane; addr.select(); });
-  addr.addEventListener('blur', () => setTimeout(() => hideSuggest(pane), 160));
-  suggest.addEventListener('mousedown', (e) => {
-    const item = e.target.closest('.sug'); if (!item) return;
-    e.preventDefault(); const u = item.dataset.url; hideSuggest(pane); view.loadURL(u);
-  });
-
-  el.addEventListener('mousedown', () => { activePane = pane; }, true);
-  el.querySelector('.back').addEventListener('click', () => { if (view.canGoBack()) view.goBack(); });
-  el.querySelector('.fwd').addEventListener('click', () => { if (view.canGoForward()) view.goForward(); });
-  el.querySelector('.reload').addEventListener('click', () => view.reload());
-  el.querySelector('.split').addEventListener('click', () => { const p = makePane(SETTINGS.home, el.nextElementSibling); rebuildGutters(); saveSession(); p.addr.focus(); });
-  el.querySelector('.close').addEventListener('click', () => closePane(pane));
-
-  // ---- bookmarks (star) ----
+  pane.syncAddr = () => { const u = pane.view && pane.view.getURL(); if (u && u !== 'about:blank' && document.activeElement !== addr) addr.value = u; };
   pane.refreshStar = async () => {
-    const u = view.getURL();
+    const u = pane.view ? pane.view.getURL() : '';
     const on = /^https?:/.test(u) ? await api.bookmarkHas(u) : false;
     star.innerHTML = on ? '&#9733;' : '&#9734;'; star.classList.toggle('on', on);
   };
   pane.toggleBookmark = async () => {
-    const u = view.getURL(); if (!/^https?:/.test(u)) return;
+    const u = pane.view ? pane.view.getURL() : ''; if (!/^https?:/.test(u)) return;
     const on = await api.bookmarkToggle({ url: u, title: pane.title || u });
     star.innerHTML = on ? '&#9733;' : '&#9734;'; star.classList.toggle('on', on);
     if (!document.getElementById('panel-bookmarks').hidden) renderBookmarks();
   };
+  pane.openFind = () => { if (!pane.view) return; findbar.hidden = false; findInput.focus(); findInput.select(); if (findInput.value) pane.view.findInPage(findInput.value); };
+  pane.closeFind = () => { findbar.hidden = true; findCount.textContent = ''; if (pane.view) { pane.view.stopFindInPage('clearSelection'); pane.view.focus(); } };
+  pane.setZoom = (z) => { const t = pane.activeTab; if (!t) return; t.zoom = Math.max(0.4, Math.min(3, z)); pane.view.setZoomFactor(t.zoom); };
+  pane.toggleMute = () => { const t = pane.activeTab; if (!t) return; t.muted = !t.muted; pane.view.setAudioMuted(t.muted); muteBtn.hidden = false; muteBtn.innerHTML = t.muted ? '&#128263;' : '&#128266;'; };
+
+  // ---- toolbar handlers (all operate on the ACTIVE tab via pane.view) ----
+  let sugTimer;
+  addr.addEventListener('input', () => { clearTimeout(sugTimer); const q = addr.value; if (!q) return hideSuggest(pane); sugTimer = setTimeout(async () => { if (document.activeElement !== addr) return; pane.sugs = await api.historyQuery(q); renderSuggest(pane); }, 110); });
+  addr.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown') { e.preventDefault(); moveSuggest(pane, 1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); moveSuggest(pane, -1); }
+    else if (e.key === 'Enter') { const chosen = pane.sugIdx >= 0 && pane.sugs[pane.sugIdx] ? pane.sugs[pane.sugIdx].url : normalize(addr.value); hideSuggest(pane); if (chosen && pane.view) pane.view.loadURL(chosen); if (pane.view) pane.view.focus(); }
+    else if (e.key === 'Escape') { hideSuggest(pane); }
+  });
+  addr.addEventListener('focus', () => { activePane = pane; addr.select(); });
+  addr.addEventListener('blur', () => setTimeout(() => hideSuggest(pane), 160));
+  suggest.addEventListener('mousedown', (e) => { const item = e.target.closest('.sug'); if (!item) return; e.preventDefault(); hideSuggest(pane); if (pane.view) pane.view.loadURL(item.dataset.url); });
+  el.addEventListener('mousedown', () => { activePane = pane; }, true);
+  el.querySelector('.back').addEventListener('click', () => { if (pane.view && pane.view.canGoBack()) pane.view.goBack(); });
+  el.querySelector('.fwd').addEventListener('click', () => { if (pane.view && pane.view.canGoForward()) pane.view.goForward(); });
+  el.querySelector('.reload').addEventListener('click', () => pane.view && pane.view.reload());
+  el.querySelector('.split').addEventListener('click', () => { const p = makePane(SETTINGS.home, el.nextElementSibling); rebuildGutters(); saveSession(); p.addr.focus(); });
+  el.querySelector('.close').addEventListener('click', () => closePane(pane));
   star.addEventListener('click', pane.toggleBookmark);
-  pane.keyBtn = keyBtn;
   keyBtn.addEventListener('click', () => Vault.fillPane(pane));
-
-  // ---- find ----
-  pane.openFind = () => { findbar.hidden = false; findInput.focus(); findInput.select(); if (findInput.value) view.findInPage(findInput.value); };
-  pane.closeFind = () => { findbar.hidden = true; findCount.textContent = ''; view.stopFindInPage('clearSelection'); view.focus(); };
-  findInput.addEventListener('input', () => { if (findInput.value) view.findInPage(findInput.value); else { view.stopFindInPage('clearSelection'); findCount.textContent = ''; } });
-  findInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') { e.preventDefault(); if (findInput.value) view.findInPage(findInput.value, { findNext: true, forward: !e.shiftKey }); }
-    else if (e.key === 'Escape') { e.preventDefault(); pane.closeFind(); }
-  });
-  el.querySelector('.find-prev').addEventListener('click', () => { if (findInput.value) view.findInPage(findInput.value, { findNext: true, forward: false }); });
-  el.querySelector('.find-next').addEventListener('click', () => { if (findInput.value) view.findInPage(findInput.value, { findNext: true, forward: true }); });
-  el.querySelector('.find-close').addEventListener('click', () => pane.closeFind());
-  view.addEventListener('found-in-page', (e) => { const r = e.result; findCount.textContent = r.matches ? r.activeMatchOrdinal + '/' + r.matches : 'no matches'; });
-
-  // ---- zoom + mute ----
-  pane.setZoom = (z) => { pane.zoom = Math.max(0.4, Math.min(3, z)); view.setZoomFactor(pane.zoom); };
-  pane.toggleMute = () => { pane.muted = !pane.muted; view.setAudioMuted(pane.muted); muteBtn.hidden = false; muteBtn.innerHTML = pane.muted ? '&#128263;' : '&#128266;'; };
   muteBtn.addEventListener('click', pane.toggleMute);
-  view.addEventListener('media-started-playing', () => { muteBtn.hidden = false; });
+  findInput.addEventListener('input', () => { if (!pane.view) return; if (findInput.value) pane.view.findInPage(findInput.value); else { pane.view.stopFindInPage('clearSelection'); findCount.textContent = ''; } });
+  findInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); if (findInput.value && pane.view) pane.view.findInPage(findInput.value, { findNext: true, forward: !e.shiftKey }); } else if (e.key === 'Escape') { e.preventDefault(); pane.closeFind(); } });
+  el.querySelector('.find-prev').addEventListener('click', () => { if (findInput.value && pane.view) pane.view.findInPage(findInput.value, { findNext: true, forward: false }); });
+  el.querySelector('.find-next').addEventListener('click', () => { if (findInput.value && pane.view) pane.view.findInPage(findInput.value, { findNext: true, forward: true }); });
+  el.querySelector('.find-close').addEventListener('click', () => pane.closeFind());
 
-  // ---- page events ----
-  view.addEventListener('did-navigate', () => { syncAddr(); saveSession(); pane.refreshStar(); Vault.refreshPaneKey(pane); });
-  view.addEventListener('did-navigate-in-page', syncAddr);
-  view.addEventListener('dom-ready', () => { syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); });
-  view.addEventListener('did-start-loading', () => { spin.hidden = false; });
-  view.addEventListener('did-stop-loading', () => {
-    spin.hidden = true; syncAddr();
-    const u = view.getURL(); if (/^https?:/.test(u)) api.historyAdd({ url: u, title: pane.title || u });
+  // ---- tab strip ----
+  tabstrip.querySelector('.newtab').addEventListener('click', () => { activePane = pane; addTab(pane, SETTINGS.home); addr.focus(); });
+  tabstrip.addEventListener('click', (e) => {
+    const closeBtn = e.target.closest('.tabclose');
+    const tabEl = e.target.closest('.tab'); if (!tabEl) return;
+    const t = pane.tabs.find((x) => x.tabEl === tabEl); if (!t) return;
+    if (closeBtn) { e.stopPropagation(); closeTab(pane, t); }
+    else if (t !== pane.activeTab) { activePane = pane; switchTab(pane, t); }
   });
-  view.addEventListener('page-title-updated', (e) => { pane.title = e.title; updateTitle(); });
-  view.addEventListener('page-favicon-updated', (e) => { const f = (e.favicons || [])[0]; if (f) { fav.src = f; fav.hidden = false; } });
-  view.addEventListener('update-target-url', (e) => { hoverEl.textContent = e.url || ''; });
-  fav.addEventListener('error', () => { fav.hidden = true; });
 
+  (tabUrls && tabUrls.length ? tabUrls : [url]).forEach((u) => addTab(pane, u));
   return pane;
+}
+
+// one tab = one live <webview>; background tabs stay alive (display:none, not destroyed)
+function addTab(pane, url) {
+  const view = document.createElement('webview');
+  view.className = 'view';
+  view.setAttribute('partition', 'persist:split');
+  view.setAttribute('allowpopups', '');
+  pane.viewsBox.appendChild(view);
+  view.setAttribute('src', url || SETTINGS.home);
+
+  const tabEl = document.createElement('div');
+  tabEl.className = 'tab';
+  tabEl.innerHTML = '<img class="tabfav" alt="" hidden /><span class="tabtitle">New tab</span><button class="tabclose" title="Close tab">&#215;</button>';
+  pane.tabstrip.insertBefore(tabEl, pane.tabstrip.querySelector('.newtab'));
+
+  const tab = { view, tabEl, title: 'New tab', favicon: '', url: url || '', zoom: 1, muted: false, loading: false, audio: false };
+  const tfav = tabEl.querySelector('.tabfav');
+  const ttitle = tabEl.querySelector('.tabtitle');
+  const active = () => pane.activeTab === tab;
+
+  view.addEventListener('did-navigate', () => { tab.url = view.getURL(); if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); } saveSession(); });
+  view.addEventListener('did-navigate-in-page', () => { tab.url = view.getURL(); if (active()) pane.syncAddr(); });
+  view.addEventListener('dom-ready', () => { if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); } });
+  view.addEventListener('did-start-loading', () => { tab.loading = true; tabEl.classList.add('loading'); if (active()) pane.spin.hidden = false; });
+  view.addEventListener('did-stop-loading', () => { tab.loading = false; tabEl.classList.remove('loading'); if (active()) { pane.spin.hidden = true; pane.syncAddr(); } const u = view.getURL(); if (/^https?:/.test(u)) api.historyAdd({ url: u, title: tab.title }); });
+  view.addEventListener('page-title-updated', (e) => { tab.title = e.title || tab.url; ttitle.textContent = tab.title; tabEl.title = tab.title; if (active()) updateTitle(); });
+  view.addEventListener('page-favicon-updated', (e) => { const f = (e.favicons || [])[0]; if (f) { tab.favicon = f; tfav.src = f; tfav.hidden = false; if (active()) { pane.fav.src = f; pane.fav.hidden = false; } } });
+  view.addEventListener('update-target-url', (e) => { hoverEl.textContent = e.url || ''; });
+  view.addEventListener('found-in-page', (e) => { if (active()) { const r = e.result; pane.findCount.textContent = r.matches ? r.activeMatchOrdinal + '/' + r.matches : 'no matches'; } });
+  view.addEventListener('media-started-playing', () => { tab.audio = true; if (active()) pane.muteBtn.hidden = false; });
+  tfav.addEventListener('error', () => { tfav.hidden = true; });
+
+  pane.tabs.push(tab);
+  pane.el.classList.toggle('multitab', pane.tabs.length > 1);
+  switchTab(pane, tab);
+  updateInfo();
+  return tab;
+}
+
+function switchTab(pane, tab) {
+  pane.tabs.forEach((t) => { t.view.style.display = (t === tab) ? '' : 'none'; t.tabEl.classList.toggle('on', t === tab); });
+  pane.activeTab = tab;
+  pane.addr.value = (tab.url && tab.url !== 'about:blank') ? tab.url : '';
+  pane.fav.hidden = !tab.favicon; if (tab.favicon) pane.fav.src = tab.favicon;
+  pane.spin.hidden = !tab.loading;
+  pane.muteBtn.hidden = !(tab.muted || tab.audio); pane.muteBtn.innerHTML = tab.muted ? '&#128263;' : '&#128266;';
+  pane.findbar.hidden = true; pane.findCount.textContent = '';
+  pane.refreshStar(); Vault.refreshPaneKey(pane); updateTitle();
+}
+
+function closeTab(pane, tab) {
+  if (pane.tabs.length <= 1) { closePane(pane); return; }
+  const i = pane.tabs.indexOf(tab);
+  tab.view.remove(); tab.tabEl.remove(); pane.tabs.splice(i, 1);
+  pane.el.classList.toggle('multitab', pane.tabs.length > 1);
+  if (pane.activeTab === tab) switchTab(pane, pane.tabs[Math.min(i, pane.tabs.length - 1)]);
+  updateInfo(); saveSession();
 }
 
 // ---- autocomplete dropdown ----
@@ -243,15 +277,18 @@ function setLayout(mode, fill) {
 let sessTimer;
 function saveSession() {
   clearTimeout(sessTimer);
-  sessTimer = setTimeout(() => { api.sessionSet(panes.map((p) => p.view.getURL()).filter((u) => /^https?:/.test(u))); }, 700);
+  sessTimer = setTimeout(() => {
+    const data = panes.map((p) => p.tabs.map((t) => t.view.getURL()).filter((u) => /^https?:/.test(u))).filter((a) => a.length);
+    api.sessionSet(data);
+  }, 700);
 }
 
 // ---- shortcuts (forwarded from main) ----
 function handleShortcut(k) {
   const p = active();
   if (k === 'l') p?.addr.focus();
-  else if (k === 't') { const np = makePane(SETTINGS.home); rebuildGutters(); saveSession(); np.addr.focus(); }
-  else if (k === 'w') { if (p) closePane(p); }
+  else if (k === 't') { if (p) { addTab(p, SETTINGS.home); p.addr.focus(); } }        // new TAB in active pane
+  else if (k === 'w') { if (p && p.activeTab) closeTab(p, p.activeTab); }               // close TAB (last tab -> closes pane)
   else if (k === 'r') p?.view.reload();
   else if (k === 'f') p?.openFind();
   else if (k === 'm') p?.toggleMute();
@@ -332,8 +369,12 @@ grid.addEventListener('mousedown', () => { document.querySelectorAll('.panel').f
 // ---- boot: restore last session, else the two demo panes ----
 SETTINGS = await api.settingsGet();
 const saved = await api.sessionGet();
-if (saved && saved.length) saved.forEach((u) => makePane(u));
-else { makePane('https://github.com'); makePane('https://dashboard.stripe.com'); }
+if (saved && saved.length) {
+  saved.forEach((entry) => {
+    if (Array.isArray(entry)) makePane(entry[0], null, entry);   // a pane with its tabs
+    else makePane(entry);                                        // legacy flat session: one url = one pane
+  });
+} else { makePane('https://github.com'); makePane('https://dashboard.stripe.com'); }
 rebuildGutters();
 activePane = panes[0];
 Vault.init({ api, getPanes: () => panes, getActive: () => active() });

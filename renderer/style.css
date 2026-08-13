@@ -17,6 +17,26 @@ body{
 .grid.g2x2{ grid-template-columns:repeat(2,1fr); }
 .grid.g3x3{ grid-template-columns:repeat(3,1fr); }
 .grid.g2x2 .pane, .grid.g3x3 .pane{ min-width:0; }
+
+/* ---- per-pane tabs ---- */
+.tabstrip{
+  flex:0 0 auto; display:flex; align-items:stretch; gap:2px; height:28px;
+  padding:3px 4px 0; background:var(--bg); border-bottom:1px solid var(--line); overflow-x:auto;
+}
+.tab{
+  flex:0 1 160px; min-width:40px; display:flex; align-items:center; gap:6px;
+  padding:0 5px 0 9px; border-radius:7px 7px 0 0; cursor:pointer; font-size:12px;
+  background:transparent; color:var(--muted); border:1px solid transparent; border-bottom:0;
+}
+.tab:hover{background:var(--surface-2); color:var(--text)}
+.tab.on{background:var(--surface); color:var(--text); border-color:var(--line)}
+.tabfav{width:14px; height:14px; flex:0 0 auto; border-radius:2px}
+.tabtitle{flex:1 1 auto; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.tabclose{flex:0 0 auto; width:16px; height:16px; border:0; background:transparent; color:var(--muted); cursor:pointer; border-radius:4px; font-size:13px; line-height:1}
+.tabclose:hover{background:var(--line-2); color:var(--text)}
+.newtab{flex:0 0 auto; width:26px; border:0; background:transparent; color:var(--muted); cursor:pointer; font-size:16px; border-radius:6px}
+.newtab:hover{background:var(--line); color:var(--text)}
+.views{flex:1 1 auto; min-height:0; display:flex; position:relative}
 .pane{
   display:flex; flex-direction:column; min-width:90px; min-height:0;
   flex:1 1 0; position:relative;
@@ -113,7 +133,7 @@ webview{ display:flex }
 
 /* address autocomplete dropdown */
 .suggest{
-  position:absolute; top:44px; left:8px; right:8px; z-index:30;
+  position:absolute; top:74px; left:8px; right:8px; z-index:30;
   background:var(--chrome); border:1px solid var(--line-2); border-radius:10px;
   box-shadow:0 12px 32px rgba(0,0,0,.45); overflow:hidden; max-height:320px; overflow-y:auto;
 }
