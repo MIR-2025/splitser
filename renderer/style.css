@@ -227,7 +227,10 @@ webview{ display:flex }
 .panel-sub{font-weight:400; font-size:11px; color:var(--muted); font-family:ui-monospace,Menlo,monospace}
 #vault-body{display:flex; flex-direction:column; gap:8px; padding:12px}
 .v-hint{color:var(--muted); font-size:12.5px; margin:0; line-height:1.5}
+.v-warn{color:#e0b57f}
 .v-err{color:#e0857f; font-size:12px; min-height:14px}
+.v-link{align-self:flex-start; background:none; border:0; padding:2px 0; color:var(--muted); font-size:12px; text-decoration:underline; cursor:pointer}
+.v-link:hover{color:var(--text)}
 .v-in{
   height:32px; background:var(--field); color:var(--text); border:1px solid var(--line);
   border-radius:8px; padding:0 11px; font-size:13px; outline:none; width:100%;

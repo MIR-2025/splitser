@@ -179,10 +179,27 @@ function renderUnlock() {
   bodyEl.innerHTML = `<p class="v-hint">Vault is locked.</p>
     <input class="v-in" id="v-pw" type="password" placeholder="Master password" />
     <button class="v-btn primary" id="v-unlock">Unlock</button>
-    <div class="v-err" id="v-err"></div>`;
+    <div class="v-err" id="v-err"></div>
+    <button class="v-link" id="v-reset">Forgot it? Reset the vault…</button>`;
   const go = async () => { const ok = await unlock(bodyEl.querySelector('#v-pw').value); if (!ok) err('Wrong master password.'); };
   bodyEl.querySelector('#v-unlock').onclick = go;
   bodyEl.querySelector('#v-pw').onkeydown = (e) => { if (e.key === 'Enter') go(); };
+  bodyEl.querySelector('#v-reset').onclick = renderReset;
+}
+// escape hatch: a locked-out user (forgot the master password, or a stray vault) can always
+// wipe and start over. Two-step, in-panel (no native dialog).
+function renderReset() {
+  bodyEl.innerHTML = `<p class="v-hint v-warn">Reset erases every saved login and lets you set a new
+    master password. There's no recovery — that's the point of a zero-knowledge vault.</p>
+    <button class="v-btn danger" id="v-reset-yes">Erase vault &amp; start over</button>
+    <button class="v-link" id="v-reset-no">Cancel</button>`;
+  bodyEl.querySelector('#v-reset-yes').onclick = resetVault;
+  bodyEl.querySelector('#v-reset-no').onclick = () => render();
+}
+async function resetVault() {
+  api.vaultSet(null);                               // clear the ciphertext blob (main writes null)
+  key = null; entries = []; salt = null; iter = ITER; hasVault = false;
+  clearTimeout(lockTimer); refreshAllKeys(); render();   // hasVault=false -> renderSetup()
 }
 function renderList(filter = '') {
   const f = filter.toLowerCase();
