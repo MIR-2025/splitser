@@ -3,13 +3,21 @@
 // and the vault (local password manager + autofill).
 import { Vault } from './vault.js';
 const api = window.splitAPI;
-const grid = document.getElementById('grid');
+const gridRoot = document.getElementById('grid');   // parent element; holds one .gridset per set
+const setbar = document.getElementById('setbar');
 const hoverEl = document.getElementById('hoverurl');
 const infoEl = document.getElementById('paneinfo');
 
-const panes = [];
-let activePane = null;
-let currentLayout = 'cols';   // 'cols' (resizable row) | 'g2x2' | 'g3x3'
+// SETS (workspaces): each set is an independent grid of panes with its own layout. Only the
+// current set is shown; the others stay in the DOM (display:none) so their webviews stay ALIVE.
+// `grid` / `panes` / `activePane` / `currentLayout` MIRROR the current set (`cur`) so all the
+// pane/tab/layout code below is unchanged -- switchSet() just re-points these four mirrors.
+const sets = [];              // [{ el, panes:[], activePane, layout, gCols:[], gRows:[] }]
+let cur = null;               // the current set
+let grid = null;              // mirror of cur.el (current .gridset container)
+let panes = [];               // mirror of cur.panes
+let activePane = null;        // mirror of cur.activePane
+let currentLayout = 'cols';   // mirror of cur.layout: 'cols' | 'g2x2' | 'g3x3'
 let SETTINGS = { home: 'https://duckduckgo.com', search: 'https://duckduckgo.com/?q=%s' };
 
 function normalize(s) {
@@ -210,7 +218,10 @@ function hideSuggest(pane) { const b = pane.el.querySelector('.suggest'); b.hidd
 function esc(s) { return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
 
 function closePane(pane) {
-  if (panes.length <= 1) { pane.view.loadURL(SETTINGS.home); return; }
+  if (panes.length <= 1) {                         // closing the only pane of a set...
+    if (sets.length > 1) { closeSet(cur); return; }  // ...closes the set, if there are others
+    pane.view.loadURL(SETTINGS.home); return;        // ...or just resets it (last pane of last set)
+  }
   const i = panes.indexOf(pane);
   panes.splice(i, 1); pane.el.remove();
   if (activePane === pane) activePane = panes[Math.min(i, panes.length - 1)] || null;
@@ -249,12 +260,12 @@ function startDrag(e) {
 function updateTitle() { const p = active(); document.title = (p && p.title) ? p.title + ' — Splitser' : 'Splitser'; }
 function updateInfo() {
   const lay = currentLayout === 'g2x2' ? ' · 2×2' : currentLayout === 'g3x3' ? ' · 3×3' : '';
-  infoEl.textContent = 'Splitser · ' + panes.length + (panes.length === 1 ? ' pane' : ' panes') + lay;
+  const setPart = sets.length > 1 ? 'set ' + (sets.indexOf(cur) + 1) + '/' + sets.length + ' · ' : '';
+  infoEl.textContent = 'Splitser · ' + setPart + panes.length + (panes.length === 1 ? ' pane' : ' panes') + lay;
 }
 
 // ---- resizable grids: fr tracks separated by real 6px divider tracks, so CSS positions the
 // dividers for us. Every internal gridline (both axes) is a draggable .gdiv; sizes persist. ----
-let gCols = [], gRows = [];
 function frLoad(key, n) {
   try { const a = JSON.parse(localStorage.getItem('fr-' + key) || 'null'); if (Array.isArray(a) && a.length === n && a.every((x) => typeof x === 'number' && x > 0)) return a; } catch (e) { /* ignore */ }
   return Array(n).fill(1);
@@ -264,10 +275,10 @@ function frTpl(arr) { return arr.map((f) => f.toFixed(4) + 'fr').join(' 6px '); 
 
 function applyGrid(mode) {
   const n = mode === 'g2x2' ? 2 : 3;   // square grids: 2×2, 3×3
-  gCols = frLoad(mode + '-c', n); gRows = frLoad(mode + '-r', n);
+  cur.gCols = frLoad(mode + '-c', n); cur.gRows = frLoad(mode + '-r', n);
   grid.style.gap = '0'; grid.style.gridAutoRows = '1fr';
-  grid.style.gridTemplateColumns = frTpl(gCols);
-  grid.style.gridTemplateRows = frTpl(gRows);
+  grid.style.gridTemplateColumns = frTpl(cur.gCols);
+  grid.style.gridTemplateRows = frTpl(cur.gRows);
   panes.forEach((p, i) => { p.el.style.gridColumn = String((i % n) * 2 + 1); p.el.style.gridRow = String(Math.floor(i / n) * 2 + 1); });
   grid.querySelectorAll('.gdiv').forEach((d) => d.remove());
   for (let c = 0; c < n - 1; c++) { const d = document.createElement('div'); d.className = 'gdiv x'; d.style.gridColumn = String(c * 2 + 2); d.style.gridRow = '1 / -1'; d.addEventListener('mousedown', (e) => startGridDrag(e, 'x', c)); grid.appendChild(d); }
@@ -276,8 +287,8 @@ function applyGrid(mode) {
 }
 function startGridDrag(e, axis, idx) {
   e.preventDefault();
-  const arr = axis === 'x' ? gCols : gRows;
-  const span = (axis === 'x' ? grid.clientWidth : grid.clientHeight) - (arr.length - 1) * 6;
+  const box = cur.el, arr = axis === 'x' ? cur.gCols : cur.gRows;
+  const span = (axis === 'x' ? box.clientWidth : box.clientHeight) - (arr.length - 1) * 6;
   const sumFr = arr.reduce((a, b) => a + b, 0);
   const frPx = span / sumFr;                    // px per 1fr (constant during a drag)
   const minFr = Math.min(90 / frPx, (arr[idx] + arr[idx + 1]) / 2);
@@ -287,16 +298,16 @@ function startGridDrag(e, axis, idx) {
   const onMove = (ev) => {
     const d = ((axis === 'x' ? ev.clientX : ev.clientY) - start) / frPx;
     arr[idx] = Math.max(minFr, Math.min(combined - minFr, a0 + d)); arr[idx + 1] = combined - arr[idx];
-    if (axis === 'x') grid.style.gridTemplateColumns = frTpl(gCols); else grid.style.gridTemplateRows = frTpl(gRows);
+    if (axis === 'x') box.style.gridTemplateColumns = frTpl(cur.gCols); else box.style.gridTemplateRows = frTpl(cur.gRows);
   };
-  const onUp = () => { shield.remove(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); frSave(currentLayout + (axis === 'x' ? '-c' : '-r'), arr); };
+  const onUp = () => { shield.remove(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); frSave(cur.layout + (axis === 'x' ? '-c' : '-r'), arr); };
   window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
 }
 
 // layout: 'cols' (resizable columns) | 'g2x2' | 'g3x3'. `fill` tops up to the grid's cell count.
-function setLayout(mode, fill) {
-  currentLayout = mode;
-  try { localStorage.setItem('layout', mode); } catch (e) { /* ignore */ }
+// Operates on the CURRENT set (via the mirrors). `save=false` while building sets at boot.
+function setLayout(mode, fill, save = true) {
+  currentLayout = mode; if (cur) cur.layout = mode;
   if (fill) {
     const need = mode === 'g2x2' ? 4 : mode === 'g3x3' ? 9 : 0;
     while (panes.length < need) makePane(SETTINGS.home);
@@ -313,15 +324,76 @@ function setLayout(mode, fill) {
     applyGrid(mode);
   }
   document.querySelectorAll('#layout-picker .lbtn').forEach((b) => b.classList.toggle('on', b.dataset.layout === mode));
+  if (save) saveSession();
+}
+
+// ---- sets / workspaces: each set is its own grid; only the current one is shown, the rest
+// stay in the DOM (display:none) so their webviews keep running. `cur` + the four mirrors are
+// the current set; switchSet() re-points them. ----
+function createSet() {
+  const el = document.createElement('div'); el.className = 'gridset'; el.style.display = 'none';
+  gridRoot.appendChild(el);
+  const s = { el, panes: [], activePane: null, layout: 'cols', gCols: [], gRows: [] };
+  sets.push(s); return s;
+}
+function bindCur(s) { cur = s; grid = s.el; panes = s.panes; activePane = s.activePane; currentLayout = s.layout; }
+function switchSet(s) {
+  if (!s) return;
+  if (cur) cur.activePane = activePane;                 // persist the mirror to the outgoing set
+  bindCur(s);
+  sets.forEach((x) => { x.el.style.display = (x === s) ? '' : 'none'; });
+  document.querySelectorAll('#layout-picker .lbtn').forEach((b) => b.classList.toggle('on', b.dataset.layout === s.layout));
+  renderSetbar(); updateTitle(); updateInfo();
+}
+// build a set from saved specs (array of per-pane tab-URL arrays) without saving mid-build
+function buildSet(layout, paneSpecs) {
+  const s = createSet(); bindCur(s);
+  (paneSpecs && paneSpecs.length ? paneSpecs : [[SETTINGS.home], [SETTINGS.home]]).forEach((t) => makePane(t[0], null, t));
+  activePane = s.activePane = panes[0];
+  setLayout(layout || 'cols', false, false);
+  return s;
+}
+function newSet() {
+  if (cur) cur.activePane = activePane;
+  const s = buildSet('cols', [[SETTINGS.home], [SETTINGS.home]]);
+  switchSet(s); saveSession();
+  panes[0]?.addr.focus();
+}
+function closeSet(s) {
+  if (sets.length <= 1) return;
+  const i = sets.indexOf(s); s.el.remove(); sets.splice(i, 1);
+  if (cur === s) { cur = null; switchSet(sets[Math.min(i, sets.length - 1)]); }
+  else renderSetbar();
   saveSession();
 }
+function renderSetbar() {
+  setbar.innerHTML = sets.map((s, i) =>
+    '<button class="setpill' + (s === cur ? ' on' : '') + '" data-i="' + i + '" title="Set ' + (i + 1) + '">' + (i + 1) +
+    (sets.length > 1 ? '<span class="setclose" data-i="' + i + '" title="Close set">&#215;</span>' : '') +
+    '</button>').join('') +
+    '<button class="setadd" title="New set (Ctrl+T)">+</button>';
+}
+setbar.addEventListener('click', (e) => {
+  if (e.target.closest('.setadd')) return newSet();
+  const pill = e.target.closest('.setpill'); if (!pill) return;
+  const i = +pill.dataset.i;
+  if (e.target.closest('.setclose')) { e.stopPropagation(); closeSet(sets[i]); }
+  else if (sets[i] !== cur) switchSet(sets[i]);
+});
 
 // ---- session persistence ----
 let sessTimer;
 function saveSession() {
   clearTimeout(sessTimer);
   sessTimer = setTimeout(() => {
-    const data = panes.map((p) => p.tabs.map((t) => t.view.getURL()).filter((u) => /^https?:/.test(u))).filter((a) => a.length);
+    if (cur) cur.activePane = activePane;
+    const data = {
+      v: 2, active: Math.max(0, sets.indexOf(cur)),
+      sets: sets.map((s) => ({
+        layout: s.layout,
+        panes: s.panes.map((p) => p.tabs.map((t) => t.view.getURL()).filter((u) => /^https?:/.test(u))).filter((a) => a.length)
+      }))
+    };
     api.sessionSet(data);
   }, 700);
 }
@@ -330,8 +402,8 @@ function saveSession() {
 function handleShortcut(k) {
   const p = active();
   if (k === 'l') p?.addr.focus();
-  else if (k === 't') { if (p) { addTab(p, SETTINGS.home); p.addr.focus(); } }        // new TAB in active pane
-  else if (k === 'w') { if (p && p.activeTab) closeTab(p, p.activeTab); }               // close TAB (last tab -> closes pane)
+  else if (k === 't') newSet();                                                         // new SET (fresh grid); tabs open via the strip +
+  else if (k === 'w') { if (p && p.activeTab) closeTab(p, p.activeTab); }               // close TAB (last tab -> pane; last pane -> set)
   else if (k === 'r') p?.view.reload();
   else if (k === 'f') p?.openFind();
   else if (k === 'm') p?.toggleMute();
@@ -406,24 +478,25 @@ panelSet.querySelectorAll('.danger').forEach((b) => b.addEventListener('click', 
   if (b.dataset.clear === 'bookmarks') { renderBookmarks(); panes.forEach((p) => p.refreshStar()); }
 }));
 
-// close panels when clicking into a pane
-grid.addEventListener('mousedown', () => { document.querySelectorAll('.panel').forEach((p) => { p.hidden = true; }); }, true);
+// close panels when clicking into any pane (bubbles up to the sets root)
+gridRoot.addEventListener('mousedown', () => { document.querySelectorAll('.panel').forEach((p) => { p.hidden = true; }); }, true);
 
-// ---- boot: restore last session, else the two demo panes ----
+// ---- boot: restore last session (v2 sets, or legacy flat), else the two demo panes ----
 SETTINGS = await api.settingsGet();
 const saved = await api.sessionGet();
-if (saved && saved.length) {
-  saved.forEach((entry) => {
-    if (Array.isArray(entry)) makePane(entry[0], null, entry);   // a pane with its tabs
-    else makePane(entry);                                        // legacy flat session: one url = one pane
-  });
-} else { makePane('https://github.com'); makePane('https://dashboard.stripe.com'); }
-rebuildGutters();
-activePane = panes[0];
+if (saved && saved.v === 2 && Array.isArray(saved.sets) && saved.sets.length) {
+  saved.sets.forEach((s) => buildSet(s.layout || 'cols', Array.isArray(s.panes) ? s.panes : []));
+  switchSet(sets[Math.min(saved.active || 0, sets.length - 1)]);
+} else if (Array.isArray(saved) && saved.length) {                 // legacy single-set session
+  buildSet('cols', saved.map((e) => Array.isArray(e) ? e : [e]));
+  switchSet(sets[0]);
+} else {
+  buildSet('cols', [['https://github.com'], ['https://dashboard.stripe.com']]);
+  switchSet(sets[0]);
+}
 Vault.init({ api, getPanes: () => panes, getActive: () => active() });
 
-// layout picker (status bar) + restore the last-used layout
+// layout picker (status bar) applies to the current set
 document.getElementById('layout-picker').addEventListener('click', (e) => {
   const b = e.target.closest('.lbtn'); if (b) setLayout(b.dataset.layout, true);
 });
-setLayout(localStorage.getItem('layout') || 'cols', false);

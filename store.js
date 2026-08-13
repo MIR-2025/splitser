@@ -56,10 +56,10 @@ export function toggleBookmark(url, title) {
   bookmarks.unshift({ url, title: title || url }); saveNow('bookmarks.json', bookmarks); return true;
 }
 
-// ---- session: the set of open pane URLs, restored on relaunch ----
+// ---- session: the open sets/panes/tabs, restored on relaunch (array = legacy; object = v2 sets) ----
 let session = load('session.json', []);
 export function getSession() { return session; }
-export function setSession(urls) { session = Array.isArray(urls) ? urls : []; saveSoon('session.json', session); }
+export function setSession(data) { session = (data && typeof data === 'object') ? data : []; saveSoon('session.json', session); }
 
 // ---- settings ----
 let settings = load('settings.json', { home: 'https://duckduckgo.com', search: 'https://duckduckgo.com/?q=%s' });

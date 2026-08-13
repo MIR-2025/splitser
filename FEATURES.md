@@ -24,16 +24,23 @@ cookies, reaches framebusting sites, no header-stripping, and it can autofill.
   column across all rows, a row divider resizes that row across all columns). Sizes persist
   per layout. Dragging works over a page because a full-window shield overlays the webviews
   for the duration of the drag.
-- **Panes:** split (toolbar `+`) / close (toolbar `×`).
-- **Tabs per pane:** every pane has its own tab strip — new tab (strip `+` or `Ctrl+T`), close
-  tab (tab `×` or `Ctrl+W`; closing the last tab closes the pane), click a tab to switch.
-  Each tab is a real live `<webview>`; background tabs stay alive (hidden, not destroyed), so
-  audio keeps playing and state is preserved. Tabs restore with the session.
+- **Sets (workspaces):** a *set* is a whole independent grid of panes with its own layout.
+  `Ctrl+T` (or the `+` in the top set-bar) opens a **new set** — a fresh two-pane grid — and
+  switches to it; click a numbered pill to switch, its `×` to close a set. Each set stays in
+  the DOM while you're on another (hidden, **webviews kept alive** — audio keeps playing,
+  page state is preserved). Every set's layout, panes, tabs, and the active set all restore
+  with the session. This is the three-level hierarchy: **sets → panes → tabs**.
+- **Panes:** split (toolbar `+`) / close (toolbar `×`), within the current set.
+- **Tabs per pane:** every pane has its own tab strip — new tab (strip `+`), close tab
+  (tab `×`), click a tab to switch. `Ctrl+W` closes the current tab, and cascades: the last
+  tab closes its pane, the last pane closes its set. Each tab is a real live `<webview>`;
+  background tabs stay alive (hidden, not destroyed), so audio keeps playing and state is
+  preserved. Tabs restore with the session.
 - Per-pane toolbar: back / forward / reload, favicon, address bar, bookmark star, split, close.
 - `target=_blank` / `window.open` opens a **new pane**, not an OS window.
 - **Roadmap:** free-form 2-D splits — splitting *any* pane into rows/columns arbitrarily and
-  nesting (the built grids are the fixed 2×2 / 3×3 shapes, now resizable); workspaces (named,
-  saved layouts).
+  nesting (the built grids are the fixed 2×2 / 3×3 shapes, now resizable); **named** sets
+  (sets exist and persist today, but they're numbered — naming/renaming is not built).
 
 ## Navigation — Built
 - Address bar: URL or search (configurable engine). Real per-pane back / forward / reload / history.
@@ -61,8 +68,9 @@ cookies, reaches framebusting sites, no header-stripping, and it can autofill.
 - Key lives only in the isolated renderer while unlocked; idle auto-lock at 15 min.
 
 ## Not built yet — Roadmap (do not claim)
-Workspaces · free-form 2-D splits (the fixed 2×2 / 3×3 grids *are* built and resizable on both
-axes — what's not built is splitting any pane arbitrarily into rows/columns) · packaging +
+Named sets (switchable, persisted sets *are* built — naming/renaming them is not) · free-form
+2-D splits (the fixed 2×2 / 3×3 grids *are* built and resizable on both axes — what's not built
+is splitting any pane arbitrarily into rows/columns) · packaging +
 code-signing + auto-update (no installer yet) · ad-block / extension support (Electron loads
 unpacked extensions only partially) · mobile · password autofill *on form submit* prompt
 (today: manual capture).

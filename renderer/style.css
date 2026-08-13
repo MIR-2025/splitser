@@ -11,11 +11,27 @@ body{
   display:flex; flex-direction:column; overflow:hidden;
 }
 
-.grid{ flex:1 1 auto; min-height:0; display:flex; }
+.grid{ flex:1 1 auto; min-height:0; display:flex; }               /* parent: holds one .gridset per set */
+.gridset{ flex:1 1 auto; min-width:0; min-height:0; display:flex; } /* one set; columns layout by default */
 /* 2-D grid layouts (Ctrl+2 / Ctrl+3): fr tracks + real 6px divider tracks, all set inline by
    applyGrid() so every internal gridline is a draggable .gdiv (both axes). */
-.grid.g2x2, .grid.g3x3{ display:grid; }
-.grid.g2x2 .pane, .grid.g3x3 .pane{ min-width:0; }
+.gridset.g2x2, .gridset.g3x3{ display:grid; }
+.gridset.g2x2 .pane, .gridset.g3x3 .pane{ min-width:0; }
+
+/* ---- set bar (workspaces): switch/close/add whole grids ---- */
+.setbar{ flex:0 0 auto; display:flex; align-items:center; gap:3px; height:30px; padding:0 6px;
+  background:var(--chrome); border-bottom:1px solid var(--line); overflow-x:auto; }
+.setpill{ display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 6px 0 9px;
+  border-radius:6px; border:1px solid transparent; background:transparent; color:var(--muted);
+  cursor:pointer; font-size:12px; font-variant-numeric:tabular-nums; }
+.setpill:hover{ background:var(--field); color:var(--text); }
+.setpill.on{ background:var(--field-focus); color:var(--text); border-color:var(--line-2); }
+.setclose{ display:inline-flex; align-items:center; justify-content:center; width:15px; height:15px;
+  border-radius:3px; font-size:13px; line-height:1; color:var(--muted); }
+.setclose:hover{ background:var(--line-2); color:var(--text); }
+.setadd{ flex:0 0 auto; width:24px; height:22px; border:0; border-radius:6px; background:transparent;
+  color:var(--muted); cursor:pointer; font-size:16px; }
+.setadd:hover{ background:var(--field); color:var(--text); }
 
 /* ---- per-pane tabs ---- */
 .tabstrip{
