@@ -46,16 +46,22 @@ webview key events don't bubble to the host). Logins persist (all panes share th
 
 ## What's native here that the extension fakes
 
-| Extension | This spike |
+| The extension (iframes) | Splitser (webviews) |
 |---|---|
-| `declarativeNetRequest` strips XFO/CSP so sites embed | not needed — webviews embed anything |
+| `declarativeNetRequest` strips XFO **and** CSP so sites frame at all | embeds first-party, no stripping |
+| framed sites lean on third-party cookies (being deprecated) | first-party — immune |
+| JS framebusting (`top !== self`) still breaks it | a webview isn't a frame — passes |
 | custom find, favicon scraping, hover-link content script | native `webview` events |
-| no reliable per-pane history | real `goBack()` / `goForward()` / `reload()` |
+| **cannot autofill** (no host access) | fills logins via the vault |
 
 ## Not yet (later phases)
 
-Workspaces (saved pane layouts), password/autofill, ad-block/extensions, 2-D splits, and a
-packaged + code-signed build with auto-update. The grid is columns-only for now.
+Workspaces (saved pane layouts), 2-D splits, a packaged + code-signed build with auto-update,
+ad-block / extension support (partial in Electron), and mobile. The grid is columns-only for now.
+
+**Canonical:** see [`FEATURES.md`](FEATURES.md) for the built-vs-roadmap list and
+[`REQUIREMENTS.md`](REQUIREMENTS.md) for software requirements + OS compatibility. If this
+README disagrees with those, those win.
 
 ## Security notes
 
