@@ -397,10 +397,12 @@ function closeSet(s) {
 function renderSetbar() {
   setbar.innerHTML = sets.map((s, i) => {
     const favs = s.panes.map((p) => p.activeTab && p.activeTab.favicon).filter(Boolean);
-    const favHtml = favs.slice(0, 4).map((f) => '<img class="setfav" src="' + f.replace(/"/g, '&quot;') + '" alt="" />').join('') +
-      (favs.length > 4 ? '<span class="setmore">+' + (favs.length - 4) + '</span>' : '');
+    const favHtml = favs.length
+      ? favs.slice(0, 4).map((f) => '<img class="setfav" src="' + f.replace(/"/g, '&quot;') + '" alt="" />').join('') +
+        (favs.length > 4 ? '<span class="setmore">+' + (favs.length - 4) + '</span>' : '')
+      : '<span class="setfav-none">&#127760;</span>';                 // globe until a favicon loads
     return '<button class="setpill' + (s === cur ? ' on' : '') + '" data-i="' + i + '" title="Set ' + (i + 1) + '">' +
-      favHtml + '<span class="setnum">' + (i + 1) + '</span>' +
+      favHtml +
       (sets.length > 1 ? '<span class="setclose" data-i="' + i + '" title="Close set">&#215;</span>' : '') +
       '</button>';
   }).join('') + '<button class="setadd" title="New set (Ctrl+T)">+</button>';
