@@ -1,5 +1,7 @@
 // Splitser renderer. Phase 1 tiling shell + Phase 2 native wins + Phase 3 data layer:
-// history-backed address autocomplete, bookmarks, session restore, downloads, settings.
+// history-backed address autocomplete, bookmarks, session restore, downloads, settings,
+// and the vault (local password manager + autofill).
+import { Vault } from './vault.js';
 const api = window.splitAPI;
 const grid = document.getElementById('grid');
 const hoverEl = document.getElementById('hoverurl');
@@ -28,6 +30,7 @@ const BAR = `
     <img class="fav" alt="" hidden />
     <input class="addr" type="text" spellcheck="false" autocomplete="off" placeholder="Search or enter address" />
     <span class="spin" hidden></span>
+    <button class="nav key" title="Fill login from vault" hidden>&#128273;</button>
     <button class="nav star" title="Bookmark (Ctrl+D)">&#9734;</button>
     <button class="nav mute" title="Mute pane (Ctrl+M)" hidden>&#128266;</button>
     <button class="nav split" title="New pane (Ctrl+T)">+</button>
@@ -56,6 +59,7 @@ function makePane(url, beforeEl = null) {
   const spin = el.querySelector('.spin');
   const fav = el.querySelector('.fav');
   const star = el.querySelector('.star');
+  const keyBtn = el.querySelector('.key');
   const muteBtn = el.querySelector('.mute');
   const suggest = el.querySelector('.suggest');
   const findbar = el.querySelector('.findbar');
@@ -114,6 +118,8 @@ function makePane(url, beforeEl = null) {
     if (!document.getElementById('panel-bookmarks').hidden) renderBookmarks();
   };
   star.addEventListener('click', pane.toggleBookmark);
+  pane.keyBtn = keyBtn;
+  keyBtn.addEventListener('click', () => Vault.fillPane(pane));
 
   // ---- find ----
   pane.openFind = () => { findbar.hidden = false; findInput.focus(); findInput.select(); if (findInput.value) view.findInPage(findInput.value); };
@@ -135,9 +141,9 @@ function makePane(url, beforeEl = null) {
   view.addEventListener('media-started-playing', () => { muteBtn.hidden = false; });
 
   // ---- page events ----
-  view.addEventListener('did-navigate', () => { syncAddr(); saveSession(); pane.refreshStar(); });
+  view.addEventListener('did-navigate', () => { syncAddr(); saveSession(); pane.refreshStar(); Vault.refreshPaneKey(pane); });
   view.addEventListener('did-navigate-in-page', syncAddr);
-  view.addEventListener('dom-ready', () => { syncAddr(); pane.refreshStar(); });
+  view.addEventListener('dom-ready', () => { syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); });
   view.addEventListener('did-start-loading', () => { spin.hidden = false; });
   view.addEventListener('did-stop-loading', () => {
     spin.hidden = true; syncAddr();
@@ -224,6 +230,7 @@ function handleShortcut(k) {
   else if (k === 'f') p?.openFind();
   else if (k === 'm') p?.toggleMute();
   else if (k === 'd') p?.toggleBookmark();
+  else if (k === 'k') Vault.togglePanel();
   else if (k === '=' || k === '+') { if (p) p.setZoom(p.zoom + 0.1); }
   else if (k === '-') { if (p) p.setZoom(p.zoom - 0.1); }
   else if (k === '0') p?.setZoom(1);
@@ -237,7 +244,7 @@ const panelDL = document.getElementById('panel-downloads');
 const panelSet = document.getElementById('panel-settings');
 function togglePanel(panel) {
   const open = panel.hidden;
-  [panelBM, panelDL, panelSet].forEach((p) => { p.hidden = true; });
+  document.querySelectorAll('.panel').forEach((p) => { p.hidden = true; });
   panel.hidden = !open;
 }
 document.getElementById('btn-bookmarks').addEventListener('click', () => { renderBookmarks(); togglePanel(panelBM); });
@@ -291,7 +298,7 @@ panelSet.querySelectorAll('.danger').forEach((b) => b.addEventListener('click', 
 }));
 
 // close panels when clicking into a pane
-grid.addEventListener('mousedown', () => { [panelBM, panelDL, panelSet].forEach((p) => { p.hidden = true; }); }, true);
+grid.addEventListener('mousedown', () => { document.querySelectorAll('.panel').forEach((p) => { p.hidden = true; }); }, true);
 
 // ---- boot: restore last session, else the two demo panes ----
 SETTINGS = await api.settingsGet();
@@ -300,3 +307,4 @@ if (saved && saved.length) saved.forEach((u) => makePane(u));
 else { makePane('https://github.com'); makePane('https://dashboard.stripe.com'); }
 rebuildGutters();
 activePane = panes[0];
+Vault.init({ api, getPanes: () => panes, getActive: () => active() });

@@ -1,6 +1,6 @@
 {
   "name": "splitser",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "private": true,
   "description": "Splitser (splitser.org) -- a tiling browser: the Split Screen UI on Electron + <webview>.",
   "type": "module",

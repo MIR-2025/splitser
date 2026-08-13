@@ -8,9 +8,9 @@ extension can't.
 
 Panes tile as **resizable columns**, each a real browser view with its own toolbar
 (back / forward / reload, favicon, bookmark star, address bar, split, close). It's a
-data-backed browser now — history, bookmarks, session restore, downloads, and settings all
-persist locally (`~/.config/splitser`). Boots on **github.com** + **dashboard.stripe.com**
-the first time; after that it reopens whatever you had.
+data-backed browser now — history, bookmarks, a **password vault (with autofill)**, session
+restore, downloads, and settings all persist locally (`~/.config/splitser`). Boots on
+**github.com** + **dashboard.stripe.com** the first time; after that it reopens whatever you had.
 
 ## Run
 
@@ -33,6 +33,11 @@ npm start
 - **Downloads** — saved to your Downloads folder; the `↓` status button tracks progress.
 - **Settings** — the `⚙` status button: home page, search URL, and clear history/bookmarks.
 - **Session restore** — reopens the panes you had open on relaunch.
+- **Vault** — `Ctrl+K` (or the `🔑` status button): a local password manager. Master password
+  → PBKDF2-SHA256 (600k) → AES-256-GCM; only ciphertext is written, the master password and
+  key are never stored. The `🔑` on a pane **fills the matching login**, "From current page"
+  captures one, and browser-CSV import works. Autofill is the thing the *extension* couldn't
+  do — it needs the host access a real browser view has.
 - **Focus address** `Ctrl+L` · **Reload pane** `Ctrl+R`.
 
 Shortcuts fire even while a page has focus (they're forwarded from the main process, since
@@ -55,8 +60,15 @@ packaged + code-signed build with auto-update. The grid is columns-only for now.
 ## Security notes
 
 The renderer (this UI) runs isolated: `contextIsolation: true`, `nodeIntegration: false`,
-`sandbox: true`. It only touches the DOM and the `<webview>` element API — no Node bridge.
-Webview content is treated as the whole hostile web.
+`sandbox: true`. It only touches the DOM, the `<webview>` element API, and a narrow preload
+bridge. Webview content is treated as the whole hostile web.
+
+**Vault crypto** is all standard WebCrypto (ported from the Vault extension): the derived
+AES-GCM key lives *only* in this isolated renderer while unlocked, never in a webview and
+never in main — main is a dumb ciphertext store. An idle auto-lock (15 min) and an explicit
+Lock clear the key from memory. A wrong master password fails the GCM auth tag on decrypt —
+that *is* the password check, so no password hash is stored either. Copied secrets are
+cleared from the clipboard after ~25s.
 
 `npm start` passes `--no-sandbox` because an npm-installed Electron's `chrome-sandbox`
 helper isn't SUID-root on Linux. That's a dev convenience only. For a real build, either

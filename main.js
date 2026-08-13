@@ -1,7 +1,7 @@
 // Splitser (splitser.org) — main process. Hosts the renderer UI with <webview> enabled
 // (real Chromium views, no header-strip), owns the data layer (history/bookmarks/session/
 // settings via store.js), and handles downloads + permission prompts on the shared session.
-import { app, BrowserWindow, ipcMain, session as electronSession, dialog, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, session as electronSession, dialog, shell, clipboard } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as store from './store.js';
@@ -12,7 +12,7 @@ let win;
 
 // Shell shortcuts intercepted on every webContents (host + each webview) so they fire even
 // while a page has focus (webview key events don't bubble to the host).
-const SHORTCUTS = new Set(['t', 'w', 'l', 'r', 'f', 'm', 'd', '=', '+', '-', '0']);
+const SHORTCUTS = new Set(['t', 'w', 'l', 'r', 'f', 'm', 'd', 'k', '=', '+', '-', '0']);
 function wireShortcuts(contents) {
   contents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown' || !(input.control || input.meta) || input.alt) return;
@@ -45,6 +45,15 @@ ipcMain.handle('settings:get', () => store.getSettings());
 ipcMain.handle('settings:set', (_e, patch) => store.setSettings(patch));
 ipcMain.handle('data:clear', (_e, kind) => store.clearData(kind));
 ipcMain.on('open-downloads', () => shell.openPath(app.getPath('downloads')));
+
+// vault: main only reads/writes the encrypted blob (never the key or plaintext)
+ipcMain.handle('vault:get', () => store.getVault());
+ipcMain.on('vault:set', (_e, blob) => store.setVault(blob));
+ipcMain.on('clipboard:write', (_e, text) => clipboard.writeText(String(text || '')));
+// auto-clear a copied secret from the clipboard after a delay (best effort)
+ipcMain.on('clipboard:clear-soon', (_e, text) => {
+  setTimeout(() => { if (clipboard.readText() === text) clipboard.writeText(''); }, 25000);
+});
 
 app.whenReady().then(() => {
   const ses = electronSession.fromPartition('persist:split');

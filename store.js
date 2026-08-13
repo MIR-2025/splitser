@@ -66,6 +66,11 @@ let settings = load('settings.json', { home: 'https://duckduckgo.com', search: '
 export function getSettings() { return settings; }
 export function setSettings(patch) { settings = { ...settings, ...patch }; saveNow('settings.json', settings); return settings; }
 
+// ---- vault: ciphertext blob only. Main NEVER sees the key, master password, or
+// plaintext -- all crypto happens in the isolated renderer. ----
+export function getVault() { return load('vault.enc', null); }
+export function setVault(blob) { saveNow('vault.enc', blob); }
+
 export function clearData(kind) {
   if (kind === 'history' || kind === 'all') { history = []; saveNow('history.json', history); }
   if (kind === 'bookmarks' || kind === 'all') { bookmarks = []; saveNow('bookmarks.json', bookmarks); }

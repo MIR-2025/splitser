@@ -167,3 +167,60 @@ webview{ display:flex }
   padding:6px 10px; font-size:12px; cursor:pointer;
 }
 .danger:hover{background:#7a2130; color:#fff; border-color:#7a2130}
+
+/* ---- vault ---- */
+.nav.key{font-size:13px; color:var(--muted)}
+.nav.key.on{color:var(--accent)}
+.panel-vault{width:400px}
+.panel-sub{font-weight:400; font-size:11px; color:var(--muted); font-family:ui-monospace,Menlo,monospace}
+#vault-body{display:flex; flex-direction:column; gap:8px; padding:12px}
+.v-hint{color:var(--muted); font-size:12.5px; margin:0; line-height:1.5}
+.v-err{color:#e0857f; font-size:12px; min-height:14px}
+.v-in{
+  height:32px; background:var(--field); color:var(--text); border:1px solid var(--line);
+  border-radius:8px; padding:0 11px; font-size:13px; outline:none; width:100%;
+}
+.v-in:focus{border-color:var(--accent)}
+.v-btn{
+  height:32px; background:var(--surface-2); color:var(--text); border:1px solid var(--line-2);
+  border-radius:8px; padding:0 14px; font-size:13px; cursor:pointer; text-align:center;
+}
+.v-btn:hover{border-color:var(--accent)}
+.v-btn.primary{background:var(--accent); color:#05130a; border-color:var(--accent); font-weight:600}
+.v-icon{
+  flex:0 0 auto; width:32px; height:32px; border-radius:8px; background:var(--surface-2);
+  border:1px solid var(--line-2); color:var(--text); cursor:pointer; font-size:15px;
+}
+.v-icon:hover{border-color:var(--accent)}
+.v-top{display:flex; gap:6px}
+.v-search{flex:1 1 auto}
+.v-list{display:flex; flex-direction:column; gap:2px; max-height:44vh; overflow-y:auto; margin:2px 0}
+.v-row{display:flex; align-items:center; gap:5px; padding:6px 4px 6px 8px; border-radius:8px}
+.v-row:hover{background:var(--line)}
+.v-row-main{flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:1px}
+.v-row-t{color:var(--text); font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.v-row-u{color:var(--muted); font-size:11px; font-family:ui-monospace,Menlo,monospace; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.v-mini{
+  flex:0 0 auto; height:24px; padding:0 7px; border-radius:6px; cursor:pointer;
+  background:transparent; border:1px solid var(--line-2); color:var(--muted); font-size:11px;
+}
+.v-mini:hover{border-color:var(--accent); color:var(--text)}
+.v-mini.danger{border-color:transparent; font-size:14px; padding:0 6px}
+.v-foot{display:flex; gap:8px}
+.v-foot .v-btn{flex:1 1 auto}
+.v-add{display:flex; flex-direction:column; gap:8px}
+.v-pwrow{display:flex; gap:6px}
+.v-pwrow .v-in{flex:1 1 auto}
+.v-addrow{display:flex; gap:8px; margin-top:2px}
+.v-addrow .v-btn{flex:1 1 auto}
+
+/* fill chooser (multiple matches) -- anchored top-right of the pane */
+.vault-chooser{
+  position:absolute; top:44px; right:8px; z-index:40; width:240px;
+  background:var(--chrome); border:1px solid var(--line-2); border-radius:10px;
+  box-shadow:0 14px 36px rgba(0,0,0,.5); overflow:hidden;
+}
+.vc-item{display:flex; flex-direction:column; gap:1px; padding:8px 12px; cursor:pointer}
+.vc-item:hover{background:var(--line)}
+.vc-item b{font-size:13px; color:var(--text)}
+.vc-item span{font-size:11px; color:var(--muted)}

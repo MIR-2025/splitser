@@ -24,5 +24,10 @@ contextBridge.exposeInMainWorld('splitAPI', {
   settingsGet: () => ipcRenderer.invoke('settings:get'),
   settingsSet: (patch) => ipcRenderer.invoke('settings:set', patch),
   clearData: (kind) => ipcRenderer.invoke('data:clear', kind),
-  openDownloads: () => ipcRenderer.send('open-downloads')
+  openDownloads: () => ipcRenderer.send('open-downloads'),
+
+  // vault (main stores only the encrypted blob) + clipboard
+  vaultGet: () => ipcRenderer.invoke('vault:get'),
+  vaultSet: (blob) => ipcRenderer.send('vault:set', blob),
+  clipboardWrite: (text) => { ipcRenderer.send('clipboard:write', text); ipcRenderer.send('clipboard:clear-soon', text); }
 });
