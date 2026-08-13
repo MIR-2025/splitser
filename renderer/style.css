@@ -74,6 +74,10 @@ body{
 .gdiv.x{ cursor:col-resize; }
 .gdiv.y{ cursor:row-resize; }
 .gdiv:hover,.gdiv:active{ background:var(--accent); }
+/* diagonal handle at each grid crossing: sits above the single-axis dividers, drags both axes */
+.gdiv.xy{ z-index:3; cursor:move; position:relative; background:var(--line-2); }
+.gdiv.xy::after{ content:""; position:absolute; inset:-5px; }   /* fatter hit target along the lines */
+.gdiv.xy:hover,.gdiv.xy:active{ background:var(--accent); }
 
 /* "save this login?" bar, injected into a pane between its toolbar and the web content */
 .savebar{ flex:0 0 auto; display:flex; align-items:center; gap:10px; padding:7px 10px;

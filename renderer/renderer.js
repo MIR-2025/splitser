@@ -288,6 +288,8 @@ function applyGrid(mode) {
   grid.querySelectorAll('.gdiv').forEach((d) => d.remove());
   for (let c = 0; c < n - 1; c++) { const d = document.createElement('div'); d.className = 'gdiv x'; d.style.gridColumn = String(c * 2 + 2); d.style.gridRow = '1 / -1'; d.addEventListener('mousedown', (e) => startGridDrag(e, 'x', c)); grid.appendChild(d); }
   for (let r = 0; r < n - 1; r++) { const d = document.createElement('div'); d.className = 'gdiv y'; d.style.gridRow = String(r * 2 + 2); d.style.gridColumn = '1 / -1'; d.addEventListener('mousedown', (e) => startGridDrag(e, 'y', r)); grid.appendChild(d); }
+  // diagonal handles where a column divider crosses a row divider: drag to resize both axes at once
+  for (let c = 0; c < n - 1; c++) for (let r = 0; r < n - 1; r++) { const d = document.createElement('div'); d.className = 'gdiv xy'; d.style.gridColumn = String(c * 2 + 2); d.style.gridRow = String(r * 2 + 2); d.addEventListener('mousedown', (e) => startGridDragXY(e, c, r)); grid.appendChild(d); }
   updateInfo();
 }
 function startGridDrag(e, axis, idx) {
@@ -306,6 +308,27 @@ function startGridDrag(e, axis, idx) {
     if (axis === 'x') box.style.gridTemplateColumns = frTpl(cur.gCols); else box.style.gridTemplateRows = frTpl(cur.gRows);
   };
   const onUp = () => { shield.remove(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); frSave(cur.layout + (axis === 'x' ? '-c' : '-r'), arr); };
+  window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
+}
+// diagonal drag: the handle at (column-divider ci, row-divider ri) reproportions both axes at once
+function startGridDragXY(e, ci, ri) {
+  e.preventDefault();
+  const box = cur.el;
+  const axis = (arr, sizePx) => { const sum = arr.reduce((a, b) => a + b, 0); return { frPx: (sizePx - (arr.length - 1) * 6) / sum }; };
+  const X = axis(cur.gCols, box.clientWidth), Y = axis(cur.gRows, box.clientHeight);
+  const minX = Math.min(90 / X.frPx, (cur.gCols[ci] + cur.gCols[ci + 1]) / 2);
+  const minY = Math.min(90 / Y.frPx, (cur.gRows[ri] + cur.gRows[ri + 1]) / 2);
+  const sx = e.clientX, sy = e.clientY;
+  const cx0 = cur.gCols[ci], combX = cur.gCols[ci] + cur.gCols[ci + 1];
+  const cy0 = cur.gRows[ri], combY = cur.gRows[ri] + cur.gRows[ri + 1];
+  const shield = document.createElement('div'); shield.className = 'drag-shield'; shield.style.cursor = 'move'; document.body.appendChild(shield);
+  const onMove = (ev) => {
+    cur.gCols[ci] = Math.max(minX, Math.min(combX - minX, cx0 + (ev.clientX - sx) / X.frPx)); cur.gCols[ci + 1] = combX - cur.gCols[ci];
+    cur.gRows[ri] = Math.max(minY, Math.min(combY - minY, cy0 + (ev.clientY - sy) / Y.frPx)); cur.gRows[ri + 1] = combY - cur.gRows[ri];
+    box.style.gridTemplateColumns = frTpl(cur.gCols);
+    box.style.gridTemplateRows = frTpl(cur.gRows);
+  };
+  const onUp = () => { shield.remove(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); frSave(cur.layout + '-c', cur.gCols); frSave(cur.layout + '-r', cur.gRows); };
   window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
 }
 
