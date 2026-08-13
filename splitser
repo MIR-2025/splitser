@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# splitser -- launch Splitser detached from the terminal.
+#
+# It runs the app in its OWN session (setsid) with stdio redirected, so the app keeps
+# running after you close the terminal (no SIGHUP), and this script returns immediately.
+#
+#   ./splitser            start (default)
+#   ./splitser stop       stop all Splitser processes
+#   ./splitser status     is it running?
+#   ./splitser restart
+#
+# Env: SPLITSER_DIR overrides the app dir; SPLITSER_LOG overrides the log path.
+
+APP="${SPLITSER_DIR:-$(cd "$(dirname "$(readlink -f "$0")")" && pwd)}"
+ELEC="$APP/node_modules/.bin/electron"
+LOG="${SPLITSER_LOG:-$HOME/.splitser.log}"
+
+# pid of a running Splitser (an electron process whose binary lives under this app), if any.
+# Match the full binary path -- not the bare word "electron" -- so it can't match a shell.
+running_pid() { pgrep -f "$APP/node_modules/electron" 2>/dev/null | awk 'NR==1{print $1}'; }
+
+case "${1:-start}" in
+  status)
+    pid=$(running_pid)
+    [ -n "$pid" ] && echo "Splitser is running (pid $pid)." || echo "Splitser is not running."
+    ;;
+  stop)
+    # kill only electron processes whose binary lives under THIS app -- never your real browser
+    if pkill -f "$APP/node_modules/electron" 2>/dev/null; then echo "Splitser stopped."; else echo "Splitser was not running."; fi
+    ;;
+  restart)
+    "$0" stop; sleep 1; exec "$0" start
+    ;;
+  start)
+    if [ ! -x "$ELEC" ]; then
+      echo "Electron isn't installed. Run:  (cd \"$APP\" && npm install)" >&2
+      exit 1
+    fi
+    pid=$(running_pid)
+    if [ -n "$pid" ]; then echo "Splitser is already running (pid $pid)."; exit 0; fi
+    cd "$APP" || exit 1
+    setsid nohup "$ELEC" . --no-sandbox >"$LOG" 2>&1 </dev/null &
+    echo "Splitser started, detached -- you can close this terminal now."
+    echo "  log:  $LOG"
+    echo "  stop: $0 stop"
+    ;;
+  *)
+    echo "usage: $0 [start|stop|status|restart]" >&2
+    exit 2
+    ;;
+esac
