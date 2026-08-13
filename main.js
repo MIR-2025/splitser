@@ -29,6 +29,11 @@ function createWindow() {
       webviewTag: true, contextIsolation: true, nodeIntegration: false, sandbox: true
     }
   });
+  // give every pane's <webview> a tiny preload that reports login submissions to the host so the
+  // vault can offer to save them (set from main, so a page can't spoof or replace it)
+  win.webContents.on('will-attach-webview', (_e, webPreferences) => {
+    webPreferences.preload = path.join(__dirname, 'webview-preload.cjs');
+  });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   wireShortcuts(win.webContents);
 }

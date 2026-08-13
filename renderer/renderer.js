@@ -171,6 +171,7 @@ function addTab(pane, url) {
   view.addEventListener('update-target-url', (e) => { hoverEl.textContent = e.url || ''; });
   view.addEventListener('found-in-page', (e) => { if (active()) { const r = e.result; pane.findCount.textContent = r.matches ? r.activeMatchOrdinal + '/' + r.matches : 'no matches'; } });
   view.addEventListener('media-started-playing', () => { tab.audio = true; if (active()) pane.muteBtn.hidden = false; });
+  view.addEventListener('ipc-message', (e) => { if (e.channel === 'vault:capture') Vault.offerSave(pane, e.args[0]); });  // "save this login?" from the webview preload
   tfav.addEventListener('error', () => { tfav.hidden = true; });
 
   pane.tabs.push(tab);

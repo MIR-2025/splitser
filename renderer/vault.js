@@ -84,6 +84,7 @@ const CAPTURE = `(function(){
 let api, getPanes, getActive;
 let key = null, entries = [], salt = null, iter = ITER, hasVault = false;
 let lockTimer = null;
+let pendingSave = null;   // a login captured while locked, re-offered after unlock
 const AUTOLOCK_MS = 15 * 60 * 1000;
 let panelEl, bodyEl, statusBtn;
 
@@ -110,7 +111,9 @@ async function unlock(master) {
   salt = ub64(blob.salt); iter = blob.iter || ITER;
   const k = await deriveKey(master, salt, iter);
   try { entries = await decryptObj(k, blob.iv, blob.data); } catch { return false; }  // GCM auth fail = wrong password
-  key = k; armLock(); render(); refreshAllKeys(); return true;
+  key = k; armLock(); render(); refreshAllKeys();
+  if (pendingSave) { const c = pendingSave; pendingSave = null; const p = getActive(); if (p) offerSave(p, c); }
+  return true;
 }
 function lock() { key = null; entries = []; clearTimeout(lockTimer); render(); refreshAllKeys(); }
 
@@ -146,6 +149,43 @@ function showChooser(pane, ms) {
 async function captureFromPane(pane) {
   let got; try { got = await pane.view.executeJavaScript(CAPTURE, true); } catch { got = null; }
   openAdd({ name: (got && got.host) || '', url: (got && got.origin) || pane.view.getURL(), username: (got && got.username) || '', password: (got && got.password) || '', note: '' });
+}
+
+// called when a pane's webview reports a login submission (webview-preload.cjs -> ipc-message).
+// Offers to save/update it -- unless it's already stored verbatim, or the vault is locked.
+function offerSave(pane, creds) {
+  if (!pane || !creds || !creds.password) return;
+  const host = creds.host || hostOf(creds.origin) || hostOf(creds.url);
+  if (!host) return;
+  if (!unlocked()) { pendingSave = creds; showSaveBar(pane, creds, host, 'locked'); return; }
+  const same = entries.find((e) => hostOf(e.url) === host && (e.username || '') === (creds.username || ''));
+  if (same) {
+    if (same.password === creds.password) return;          // already saved, nothing to offer
+    showSaveBar(pane, creds, host, 'update', same);        // password changed -> offer to update
+  } else {
+    showSaveBar(pane, creds, host, 'new');
+  }
+}
+function showSaveBar(pane, creds, host, mode, existing) {
+  pane.el.querySelectorAll('.savebar').forEach((b) => b.remove());
+  const label = mode === 'locked' ? 'Save this login to your vault? Unlock it to save.'
+    : mode === 'update' ? 'Update the saved password for ' + host + '?'
+    : 'Save password for ' + host + '?';
+  const primary = mode === 'locked' ? 'Unlock &amp; save' : mode === 'update' ? 'Update' : 'Save';
+  const bar = document.createElement('div');
+  bar.className = 'savebar';
+  bar.innerHTML = '<span class="sb-key">&#128273;</span><span class="sb-text">' + esc(label) + '</span>' +
+    '<button class="sb-btn primary" data-a="ok">' + primary + '</button>' +
+    '<button class="sb-btn" data-a="no">Not now</button>';
+  bar.querySelector('[data-a="no"]').onclick = () => { bar.remove(); if (mode === 'locked') pendingSave = null; };
+  bar.querySelector('[data-a="ok"]').onclick = async () => {
+    bar.remove();
+    if (mode === 'locked') { openPanel(); return; }        // unlock -> pendingSave re-offered on success
+    if (mode === 'update' && existing) { existing.password = creds.password; existing.username = creds.username || existing.username; }
+    else { entries.unshift({ name: host, url: creds.origin || creds.url || ('https://' + host), username: creds.username || '', password: creds.password, note: '' }); }
+    await persist(); refreshAllKeys();
+  };
+  pane.el.insertBefore(bar, pane.viewsBox);
 }
 
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
@@ -270,5 +310,5 @@ export const Vault = {
     bodyEl.addEventListener('mousedown', armLock, true);
     return load();
   },
-  refreshPaneKey, fillPane, unlocked, togglePanel
+  refreshPaneKey, fillPane, unlocked, togglePanel, offerSave
 };

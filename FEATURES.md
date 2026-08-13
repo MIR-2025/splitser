@@ -65,6 +65,15 @@ cookies, reaches framebusting sites, no header-stripping, and it can autofill.
   copy user/pass (clipboard auto-clears ~25 s), delete, "From current page" capture, CSV import.
 - **Autofill** — the `🔑` on a pane fills the matching login into the page (chooser if
   multiple match). *This is what the extension structurally cannot do.*
+- **Offer to save** — when you submit a login in any pane, Splitser offers to save it: an
+  in-pane bar (`Save password for <host>?`) appears, or `Update…?` if the password changed,
+  and it stays quiet if that login is already stored. A tiny per-webview preload (set from
+  main, so a page can't spoof it) notices the submit and reports `{host, username, password}`
+  up to the vault; the vault key never goes near the page. If the vault is locked it offers
+  "Unlock & save" and completes the save once you unlock.
+- **Never locked out** — the unlock screen has a "Forgot it? Reset the vault…" escape: a
+  two-step in-panel confirm wipes the ciphertext and returns you to the create form. Honest
+  about the trade: reset **erases** the stored logins, it can't recover them (zero-knowledge).
 - Key lives only in the isolated renderer while unlocked; idle auto-lock at 15 min.
 
 ## Not built yet — Roadmap (do not claim)
@@ -72,5 +81,4 @@ Named sets (switchable, persisted sets *are* built — naming/renaming them is n
 2-D splits (the fixed 2×2 / 3×3 grids *are* built and resizable on both axes — what's not built
 is splitting any pane arbitrarily into rows/columns) · packaging +
 code-signing + auto-update (no installer yet) · ad-block / extension support (Electron loads
-unpacked extensions only partially) · mobile · password autofill *on form submit* prompt
-(today: manual capture).
+unpacked extensions only partially) · mobile.
