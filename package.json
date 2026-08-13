@@ -1,8 +1,8 @@
 {
-  "name": "splitbrowser",
-  "version": "0.0.1",
+  "name": "splitser",
+  "version": "0.0.3",
   "private": true,
-  "description": "Split Screen, standalone -- Phase 0 spike: a 2-pane <webview> grid that embeds anything an iframe can't.",
+  "description": "Splitser (splitser.org) -- a tiling browser: the Split Screen UI on Electron + <webview>.",
   "type": "module",
   "main": "main.js",
   "scripts": {

@@ -4,15 +4,45 @@
   <meta charset="utf-8" />
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: http: data:" />
-  <title>Split</title>
+  <title>Splitser</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div class="grid" id="grid"><!-- panes injected by renderer.js --></div>
+
   <div class="statusbar">
     <span class="hoverurl" id="hoverurl"></span>
-    <span class="brand" id="paneinfo">Split</span>
+    <div class="status-right">
+      <button class="sbtn" id="btn-bookmarks" title="Bookmarks">&#9733;</button>
+      <button class="sbtn" id="btn-downloads" title="Downloads" hidden>&#8595;<span class="dl-badge" id="dl-badge"></span></button>
+      <button class="sbtn" id="btn-settings" title="Settings">&#9881;</button>
+      <span class="brand" id="paneinfo">Splitser</span>
+    </div>
   </div>
+
+  <div class="panel" id="panel-bookmarks" hidden>
+    <div class="panel-h">Bookmarks</div>
+    <div class="panel-body" id="bm-list"></div>
+  </div>
+
+  <div class="panel" id="panel-downloads" hidden>
+    <div class="panel-h">Downloads <button class="panel-link" id="open-dl-folder">Open folder</button></div>
+    <div class="panel-body" id="dl-list"></div>
+  </div>
+
+  <div class="panel" id="panel-settings" hidden>
+    <div class="panel-h">Settings</div>
+    <div class="panel-body settings">
+      <label>Home page<input id="set-home" type="text" spellcheck="false" /></label>
+      <label>Search URL <span class="hint">%s = your query</span><input id="set-search" type="text" spellcheck="false" /></label>
+      <div class="set-row">
+        <button class="danger" data-clear="history">Clear history</button>
+        <button class="danger" data-clear="bookmarks">Clear bookmarks</button>
+        <button class="danger" data-clear="session">Reset session</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module" src="renderer.js"></script>
 </body>
 </html>

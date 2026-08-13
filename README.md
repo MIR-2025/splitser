@@ -1,15 +1,16 @@
-# Split (standalone) — Phases 0–2
+# Splitser — a tiling browser · splitser.org
 
-Lifting the **Split Screen** extension's tiling UI onto a real browser shell:
-**Electron + `<webview>`**. A `<webview>` is a real Chromium view, not an iframe — so it
-embeds anything, with no `X-Frame-Options` / CSP header-stripping and none of the
-framing-detection games the extension has to play.
+**Splitser** lifts the **Split Screen** extension's tiling UI onto a real browser shell:
+**Electron + `<webview>`**. A `<webview>` is a real Chromium view, not an iframe, so it
+embeds anything as a first-party, top-level page — no CSP header-stripping, no
+framing-detection games, and it survives third-party-cookie deprecation the way the
+extension can't.
 
-**Phase 1** is the tiling shell: a dynamic set of panes laid out as **resizable columns**.
-Each pane is a real browser view with its own toolbar — back / forward / reload, favicon,
-address bar, split and close. Drag the gutter between two panes to resize them. It boots
-pointed at **github.com** and **dashboard.stripe.com** — two sites the iframe version
-flat-out cannot embed — so the first thing you see is the ceiling being gone.
+Panes tile as **resizable columns**, each a real browser view with its own toolbar
+(back / forward / reload, favicon, bookmark star, address bar, split, close). It's a
+data-backed browser now — history, bookmarks, session restore, downloads, and settings all
+persist locally (`~/.config/splitser`). Boots on **github.com** + **dashboard.stripe.com**
+the first time; after that it reopens whatever you had.
 
 ## Run
 
@@ -27,6 +28,11 @@ npm start
 - **Zoom** — `Ctrl+=` / `Ctrl+-` / `Ctrl+0`, per pane.
 - **Mute** — `Ctrl+M`, or the speaker button that appears when a pane plays audio.
 - **Open in new pane** — a `target=_blank` link or popup opens a **new pane**, not a window.
+- **Bookmark** — the `☆` on a pane (or `Ctrl+D`); the `★` in the status bar lists them.
+- **Address autocomplete** — as you type, matches from your history drop down (↑/↓, Enter).
+- **Downloads** — saved to your Downloads folder; the `↓` status button tracks progress.
+- **Settings** — the `⚙` status button: home page, search URL, and clear history/bookmarks.
+- **Session restore** — reopens the panes you had open on relaunch.
 - **Focus address** `Ctrl+L` · **Reload pane** `Ctrl+R`.
 
 Shortcuts fire even while a page has focus (they're forwarded from the main process, since
@@ -43,8 +49,8 @@ webview key events don't bubble to the host). Logins persist (all panes share th
 
 ## Not yet (later phases)
 
-Workspaces, bookmarks store, history + address autocomplete, downloads, settings
-(Phases 3–4). The grid is columns-only for now — 2-D splits come later.
+Workspaces (saved pane layouts), password/autofill, ad-block/extensions, 2-D splits, and a
+packaged + code-signed build with auto-update. The grid is columns-only for now.
 
 ## Security notes
 
