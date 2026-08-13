@@ -9,6 +9,7 @@ const infoEl = document.getElementById('paneinfo');
 
 const panes = [];
 let activePane = null;
+let currentLayout = 'cols';   // 'cols' (resizable row) | 'g2x2' | 'g3x3'
 let SETTINGS = { home: 'https://duckduckgo.com', search: 'https://duckduckgo.com/?q=%s' };
 
 function normalize(s) {
@@ -184,6 +185,7 @@ function closePane(pane) {
 
 function rebuildGutters() {
   grid.querySelectorAll('.gutter').forEach((g) => g.remove());
+  if (currentLayout !== 'cols') { updateInfo(); return; }   // grids have no drag-gutters
   const paneEls = [...grid.querySelectorAll('.pane')];
   paneEls.forEach((pe, idx) => {
     if (idx < paneEls.length - 1) {
@@ -211,7 +213,31 @@ function startDrag(e) {
   window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
 }
 function updateTitle() { const p = active(); document.title = (p && p.title) ? p.title + ' — Splitser' : 'Splitser'; }
-function updateInfo() { infoEl.textContent = 'Splitser · ' + panes.length + (panes.length === 1 ? ' pane' : ' panes'); }
+function updateInfo() {
+  const lay = currentLayout === 'g2x2' ? ' · 2×2' : currentLayout === 'g3x3' ? ' · 3×3' : '';
+  infoEl.textContent = 'Splitser · ' + panes.length + (panes.length === 1 ? ' pane' : ' panes') + lay;
+}
+
+// layout: 'cols' (resizable row) | 'g2x2' | 'g3x3'. `fill` tops up to the grid's cell count.
+function setLayout(mode, fill) {
+  currentLayout = mode;
+  try { localStorage.setItem('layout', mode); } catch (e) { /* ignore */ }
+  if (fill) {
+    const need = mode === 'g2x2' ? 4 : mode === 'g3x3' ? 9 : 0;
+    while (panes.length < need) makePane(SETTINGS.home);
+  }
+  grid.classList.remove('g2x2', 'g3x3');
+  if (mode === 'cols') {
+    panes.forEach((p) => { p.el.style.flexGrow = '1'; });
+    rebuildGutters();
+  } else {
+    grid.querySelectorAll('.gutter').forEach((g) => g.remove());
+    grid.classList.add(mode);
+    updateInfo();
+  }
+  document.querySelectorAll('#layout-picker .lbtn').forEach((b) => b.classList.toggle('on', b.dataset.layout === mode));
+  saveSession();
+}
 
 // ---- session persistence ----
 let sessTimer;
@@ -231,6 +257,9 @@ function handleShortcut(k) {
   else if (k === 'm') p?.toggleMute();
   else if (k === 'd') p?.toggleBookmark();
   else if (k === 'k') Vault.togglePanel();
+  else if (k === '1') setLayout('cols', false);
+  else if (k === '2') setLayout('g2x2', true);
+  else if (k === '3') setLayout('g3x3', true);
   else if (k === '=' || k === '+') { if (p) p.setZoom(p.zoom + 0.1); }
   else if (k === '-') { if (p) p.setZoom(p.zoom - 0.1); }
   else if (k === '0') p?.setZoom(1);
@@ -308,3 +337,9 @@ else { makePane('https://github.com'); makePane('https://dashboard.stripe.com');
 rebuildGutters();
 activePane = panes[0];
 Vault.init({ api, getPanes: () => panes, getActive: () => active() });
+
+// layout picker (status bar) + restore the last-used layout
+document.getElementById('layout-picker').addEventListener('click', (e) => {
+  const b = e.target.closest('.lbtn'); if (b) setLayout(b.dataset.layout, true);
+});
+setLayout(localStorage.getItem('layout') || 'cols', false);

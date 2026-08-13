@@ -15,12 +15,14 @@ killed, and *cannot autofill*). Splitser's panes are real top-level views: first
 cookies, reaches framebusting sites, no header-stripping, and it can autofill.
 
 ## Tiling & panes — Built
-- Dynamic panes laid out as **resizable columns**; add / split (`+` or `Ctrl+T`) / close
-  (`×` or `Ctrl+W`); drag the gutter between two panes to resize.
+- Dynamic panes: **resizable columns** (default — drag the gutter to resize) plus **2×2 and
+  3×3 grid layouts**. Switch with the status-bar picker or `Ctrl+1` (columns) / `Ctrl+2` (2×2)
+  / `Ctrl+3` (3×3); the choice persists across launches, and switching to a grid tops up to
+  its cell count.
+- add / split (`+` or `Ctrl+T`) / close (`×` or `Ctrl+W`).
 - Per-pane toolbar: back / forward / reload, favicon, address bar, bookmark star, split, close.
 - `target=_blank` / `window.open` opens a **new pane**, not an OS window.
-- Grid is **columns-only** today.
-- **Roadmap:** 2-D splits (rows within columns); workspaces (named, saved pane layouts).
+- **Roadmap:** arbitrary / resizable 2-D splits; per-pane tabs; workspaces (named, saved layouts).
 
 ## Navigation — Built
 - Address bar: URL or search (configurable engine). Real per-pane back / forward / reload / history.

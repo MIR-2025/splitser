@@ -12,6 +12,11 @@ body{
 }
 
 .grid{ flex:1 1 auto; min-height:0; display:flex; }
+/* 2-D grid layouts (Ctrl+2 / Ctrl+3) -- panes flow into cells, thin gap as dividers */
+.grid.g2x2, .grid.g3x3{ display:grid; grid-auto-rows:1fr; gap:1px; background:var(--line); }
+.grid.g2x2{ grid-template-columns:repeat(2,1fr); }
+.grid.g3x3{ grid-template-columns:repeat(3,1fr); }
+.grid.g2x2 .pane, .grid.g3x3 .pane{ min-width:0; }
 .pane{
   display:flex; flex-direction:column; min-width:90px; min-height:0;
   flex:1 1 0; position:relative;
@@ -125,6 +130,12 @@ webview{ display:flex }
 }
 .sbtn:hover{background:var(--line); color:var(--text)}
 .dl-badge{color:var(--accent); font-size:10px}
+.layout-picker{display:inline-flex; border:1px solid var(--line-2); border-radius:6px; overflow:hidden; margin-right:2px}
+.lbtn{background:transparent; border:0; border-left:1px solid var(--line-2); color:var(--muted);
+  height:20px; padding:0 6px; font-size:10.5px; cursor:pointer; font-variant-numeric:tabular-nums}
+.lbtn:first-child{border-left:0; font-size:12px; padding:0 5px}
+.lbtn:hover{background:var(--line); color:var(--text)}
+.lbtn.on{background:var(--accent); color:#05130a}
 
 /* pop-over panels (bookmarks / downloads / settings) */
 .panel{

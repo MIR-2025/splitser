@@ -12,7 +12,7 @@ let win;
 
 // Shell shortcuts intercepted on every webContents (host + each webview) so they fire even
 // while a page has focus (webview key events don't bubble to the host).
-const SHORTCUTS = new Set(['t', 'w', 'l', 'r', 'f', 'm', 'd', 'k', '=', '+', '-', '0']);
+const SHORTCUTS = new Set(['t', 'w', 'l', 'r', 'f', 'm', 'd', 'k', '1', '2', '3', '=', '+', '-', '0']);
 function wireShortcuts(contents) {
   contents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown' || !(input.control || input.meta) || input.alt) return;
