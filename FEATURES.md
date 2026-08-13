@@ -19,14 +19,21 @@ cookies, reaches framebusting sites, no header-stripping, and it can autofill.
   3×3 grid layouts**. Switch with the status-bar picker or `Ctrl+1` (columns) / `Ctrl+2` (2×2)
   / `Ctrl+3` (3×3); the choice persists across launches, and switching to a grid tops up to
   its cell count.
-- **Panes:** split (toolbar `+`) / close (toolbar `×`). Resize by dragging the gutter.
+- **Resizable everywhere:** every internal border drags. Columns have vertical gutters; the
+  2×2 / 3×3 grids have draggable dividers on **both** axes (a column divider resizes that
+  column across all rows, a row divider resizes that row across all columns). Sizes persist
+  per layout. Dragging works over a page because a full-window shield overlays the webviews
+  for the duration of the drag.
+- **Panes:** split (toolbar `+`) / close (toolbar `×`).
 - **Tabs per pane:** every pane has its own tab strip — new tab (strip `+` or `Ctrl+T`), close
   tab (tab `×` or `Ctrl+W`; closing the last tab closes the pane), click a tab to switch.
   Each tab is a real live `<webview>`; background tabs stay alive (hidden, not destroyed), so
   audio keeps playing and state is preserved. Tabs restore with the session.
 - Per-pane toolbar: back / forward / reload, favicon, address bar, bookmark star, split, close.
 - `target=_blank` / `window.open` opens a **new pane**, not an OS window.
-- **Roadmap:** arbitrary / resizable 2-D splits; workspaces (named, saved layouts).
+- **Roadmap:** free-form 2-D splits — splitting *any* pane into rows/columns arbitrarily and
+  nesting (the built grids are the fixed 2×2 / 3×3 shapes, now resizable); workspaces (named,
+  saved layouts).
 
 ## Navigation — Built
 - Address bar: URL or search (configurable engine). Real per-pane back / forward / reload / history.
@@ -54,6 +61,8 @@ cookies, reaches framebusting sites, no header-stripping, and it can autofill.
 - Key lives only in the isolated renderer while unlocked; idle auto-lock at 15 min.
 
 ## Not built yet — Roadmap (do not claim)
-Workspaces · 2-D splits · packaging + code-signing + auto-update (no installer yet) ·
-ad-block / extension support (Electron loads unpacked extensions only partially) · mobile ·
-password autofill *on form submit* prompt (today: manual capture).
+Workspaces · free-form 2-D splits (the fixed 2×2 / 3×3 grids *are* built and resizable on both
+axes — what's not built is splitting any pane arbitrarily into rows/columns) · packaging +
+code-signing + auto-update (no installer yet) · ad-block / extension support (Electron loads
+unpacked extensions only partially) · mobile · password autofill *on form submit* prompt
+(today: manual capture).

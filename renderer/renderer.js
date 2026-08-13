@@ -219,7 +219,7 @@ function closePane(pane) {
 
 function rebuildGutters() {
   grid.querySelectorAll('.gutter').forEach((g) => g.remove());
-  if (currentLayout !== 'cols') { updateInfo(); return; }   // grids have no drag-gutters
+  if (currentLayout !== 'cols') { applyGrid(currentLayout); return; }   // grids re-place + re-divide
   const paneEls = [...grid.querySelectorAll('.pane')];
   paneEls.forEach((pe, idx) => {
     if (idx < paneEls.length - 1) {
@@ -252,7 +252,48 @@ function updateInfo() {
   infoEl.textContent = 'Splitser · ' + panes.length + (panes.length === 1 ? ' pane' : ' panes') + lay;
 }
 
-// layout: 'cols' (resizable row) | 'g2x2' | 'g3x3'. `fill` tops up to the grid's cell count.
+// ---- resizable grids: fr tracks separated by real 6px divider tracks, so CSS positions the
+// dividers for us. Every internal gridline (both axes) is a draggable .gdiv; sizes persist. ----
+let gCols = [], gRows = [];
+function frLoad(key, n) {
+  try { const a = JSON.parse(localStorage.getItem('fr-' + key) || 'null'); if (Array.isArray(a) && a.length === n && a.every((x) => typeof x === 'number' && x > 0)) return a; } catch (e) { /* ignore */ }
+  return Array(n).fill(1);
+}
+function frSave(key, arr) { try { localStorage.setItem('fr-' + key, JSON.stringify(arr)); } catch (e) { /* ignore */ } }
+function frTpl(arr) { return arr.map((f) => f.toFixed(4) + 'fr').join(' 6px '); }
+
+function applyGrid(mode) {
+  const n = mode === 'g2x2' ? 2 : 3;   // square grids: 2×2, 3×3
+  gCols = frLoad(mode + '-c', n); gRows = frLoad(mode + '-r', n);
+  grid.style.gap = '0'; grid.style.gridAutoRows = '1fr';
+  grid.style.gridTemplateColumns = frTpl(gCols);
+  grid.style.gridTemplateRows = frTpl(gRows);
+  panes.forEach((p, i) => { p.el.style.gridColumn = String((i % n) * 2 + 1); p.el.style.gridRow = String(Math.floor(i / n) * 2 + 1); });
+  grid.querySelectorAll('.gdiv').forEach((d) => d.remove());
+  for (let c = 0; c < n - 1; c++) { const d = document.createElement('div'); d.className = 'gdiv x'; d.style.gridColumn = String(c * 2 + 2); d.style.gridRow = '1 / -1'; d.addEventListener('mousedown', (e) => startGridDrag(e, 'x', c)); grid.appendChild(d); }
+  for (let r = 0; r < n - 1; r++) { const d = document.createElement('div'); d.className = 'gdiv y'; d.style.gridRow = String(r * 2 + 2); d.style.gridColumn = '1 / -1'; d.addEventListener('mousedown', (e) => startGridDrag(e, 'y', r)); grid.appendChild(d); }
+  updateInfo();
+}
+function startGridDrag(e, axis, idx) {
+  e.preventDefault();
+  const arr = axis === 'x' ? gCols : gRows;
+  const span = (axis === 'x' ? grid.clientWidth : grid.clientHeight) - (arr.length - 1) * 6;
+  const sumFr = arr.reduce((a, b) => a + b, 0);
+  const frPx = span / sumFr;                    // px per 1fr (constant during a drag)
+  const minFr = Math.min(90 / frPx, (arr[idx] + arr[idx + 1]) / 2);
+  const start = axis === 'x' ? e.clientX : e.clientY;
+  const a0 = arr[idx], combined = arr[idx] + arr[idx + 1];
+  const shield = document.createElement('div'); shield.className = 'drag-shield'; shield.style.cursor = axis === 'x' ? 'col-resize' : 'row-resize'; document.body.appendChild(shield);
+  const onMove = (ev) => {
+    const d = ((axis === 'x' ? ev.clientX : ev.clientY) - start) / frPx;
+    arr[idx] = Math.max(minFr, Math.min(combined - minFr, a0 + d)); arr[idx + 1] = combined - arr[idx];
+    if (axis === 'x') grid.style.gridTemplateColumns = frTpl(gCols); else grid.style.gridTemplateRows = frTpl(gRows);
+  };
+  const onUp = () => { shield.remove(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); frSave(currentLayout + (axis === 'x' ? '-c' : '-r'), arr); };
+  window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
+}
+
+// layout: 'cols' (resizable columns) | 'g2x2' | 'g3x3'. `fill` tops up to the grid's cell count.
 function setLayout(mode, fill) {
   currentLayout = mode;
   try { localStorage.setItem('layout', mode); } catch (e) { /* ignore */ }
@@ -262,12 +303,14 @@ function setLayout(mode, fill) {
   }
   grid.classList.remove('g2x2', 'g3x3');
   if (mode === 'cols') {
-    panes.forEach((p) => { p.el.style.flexGrow = '1'; });
+    grid.style.gridTemplateColumns = ''; grid.style.gridTemplateRows = ''; grid.style.gap = ''; grid.style.gridAutoRows = '';
+    grid.querySelectorAll('.gdiv').forEach((d) => d.remove());
+    panes.forEach((p) => { p.el.style.gridColumn = ''; p.el.style.gridRow = ''; p.el.style.flexGrow = '1'; });
     rebuildGutters();
   } else {
     grid.querySelectorAll('.gutter').forEach((g) => g.remove());
     grid.classList.add(mode);
-    updateInfo();
+    applyGrid(mode);
   }
   document.querySelectorAll('#layout-picker .lbtn').forEach((b) => b.classList.toggle('on', b.dataset.layout === mode));
   saveSession();
