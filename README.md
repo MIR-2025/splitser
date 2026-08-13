@@ -19,6 +19,14 @@ npm install     # pulls the Electron runtime (~large, one time)
 npm start
 ```
 
+**Or run it detached** — keeps running after you close the terminal (own session, no
+controlling tty, reparented to init):
+
+```sh
+./splitser            # start in its own session
+./splitser stop       # also: status · restart
+```
+
 - **Address bar** — type a URL or a search, Enter to go. Reload / back / forward are real
   per-view navigation; each pane keeps its own history.
 - **Split** — the `+` on a pane's toolbar (or `Ctrl+T`) opens a new pane to its right.
