@@ -1,0 +1,80 @@
+:root{
+  --bg:#0e1418; --chrome:#12181d; --line:#232c33; --line-2:#2c3740;
+  --text:#e7e3d6; --muted:#8b968c; --accent:#5fe08a;
+  --field:#0b1013; --field-focus:#0e161b;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--bg); color:var(--text);
+  font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  display:flex; flex-direction:column; overflow:hidden;
+}
+
+.grid{ flex:1 1 auto; min-height:0; display:flex; }
+.pane{
+  display:flex; flex-direction:column; min-width:90px; min-height:0;
+  flex:1 1 0;
+}
+
+/* draggable divider between panes */
+.gutter{
+  flex:0 0 6px; align-self:stretch; cursor:col-resize;
+  background:var(--line); position:relative;
+}
+.gutter:hover,.gutter:active{background:var(--accent)}
+.gutter::after{content:"";position:absolute;inset:0 -4px;} /* fatter hit target */
+.drag-shield{position:fixed;inset:0;z-index:9999;cursor:col-resize}
+
+.bar{
+  display:flex; align-items:center; gap:6px;
+  padding:7px 9px; background:var(--chrome); border-bottom:1px solid var(--line);
+}
+.nav{
+  flex:0 0 auto; width:28px; height:28px; border-radius:7px;
+  background:transparent; color:var(--muted); border:1px solid transparent;
+  font-size:16px; line-height:1; cursor:pointer;
+}
+.nav:hover{background:var(--line); color:var(--text)}
+.nav:active{background:var(--line-2)}
+.nav.reload{font-size:15px}
+.nav.split{font-size:18px; margin-left:2px}
+.nav.close{font-size:17px}
+.nav.close:hover{background:#7a2130; color:#fff}
+
+.fav{flex:0 0 auto; width:16px; height:16px; border-radius:3px; margin:0 1px}
+
+.addr{
+  flex:1 1 auto; min-width:0; height:30px;
+  background:var(--field); color:var(--text);
+  border:1px solid var(--line); border-radius:8px;
+  padding:0 12px; font-size:13px; font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  outline:none;
+}
+.addr::placeholder{color:var(--muted)}
+.addr:focus{border-color:var(--accent); background:var(--field-focus)}
+
+.spin{
+  flex:0 0 auto; width:14px; height:14px; margin-left:2px;
+  border:2px solid var(--line-2); border-top-color:var(--accent); border-radius:50%;
+  animation:spin .7s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+
+/* the real Chromium view -- fills the pane */
+.view{ flex:1 1 auto; width:100%; min-height:0; background:#fff; border:0 }
+webview{ display:flex }
+
+.statusbar{
+  flex:0 0 auto; height:26px;
+  display:flex; align-items:center; justify-content:space-between; gap:16px;
+  padding:0 12px; background:var(--chrome); border-top:1px solid var(--line);
+  font-size:11px; color:var(--muted);
+}
+.hoverurl{
+  font-family:ui-monospace,Menlo,Consolas,monospace;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:60%;
+}
+.brand{white-space:nowrap; color:var(--muted)}
+.brand::before{content:"● "; color:var(--accent)}

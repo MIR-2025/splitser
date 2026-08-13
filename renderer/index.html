@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: http: data:" />
+  <title>Split</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="grid" id="grid"><!-- panes injected by renderer.js --></div>
+  <div class="statusbar">
+    <span class="hoverurl" id="hoverurl"></span>
+    <span class="brand" id="paneinfo">Split</span>
+  </div>
+  <script type="module" src="renderer.js"></script>
+</body>
+</html>

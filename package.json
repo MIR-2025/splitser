@@ -1,0 +1,14 @@
+{
+  "name": "splitbrowser",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Split Screen, standalone -- Phase 0 spike: a 2-pane <webview> grid that embeds anything an iframe can't.",
+  "type": "module",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron . --no-sandbox"
+  },
+  "devDependencies": {
+    "electron": "^32.0.0"
+  }
+}
