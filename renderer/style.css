@@ -62,6 +62,30 @@ body{
 @keyframes spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.spin{animation:none}}
 
+.nav.mute{font-size:13px}
+
+/* native find-in-page bar (Ctrl+F) */
+.findbar{
+  display:flex; align-items:center; gap:6px;
+  padding:6px 9px; background:var(--chrome); border-bottom:1px solid var(--line);
+}
+.findbar[hidden]{display:none}  /* class display:flex would otherwise beat [hidden] */
+.find-input{
+  flex:1 1 auto; min-width:0; height:26px;
+  background:var(--field); color:var(--text); border:1px solid var(--line);
+  border-radius:7px; padding:0 10px; font-size:13px; outline:none;
+}
+.find-input:focus{border-color:var(--accent)}
+.find-count{
+  font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; color:var(--muted);
+  min-width:56px; text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap;
+}
+.find-btn{
+  flex:0 0 auto; width:26px; height:26px; border-radius:6px; cursor:pointer;
+  background:transparent; color:var(--muted); border:1px solid transparent; font-size:13px;
+}
+.find-btn:hover{background:var(--line); color:var(--text)}
+
 /* the real Chromium view -- fills the pane */
 .view{ flex:1 1 auto; width:100%; min-height:0; background:#fff; border:0 }
 webview{ display:flex }

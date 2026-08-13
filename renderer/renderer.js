@@ -1,7 +1,6 @@
-// Phase 1 -- the tiling shell. A dynamic set of panes laid out as resizable columns.
-// Each pane is a real <webview> with its own toolbar (back/fwd/reload, favicon, address,
-// split, close). Draggable gutters between panes resize the neighbours. Everything the
-// extension fakes with postMessage + a header-strip is a native webview call/event here.
+// Phase 1 shell + Phase 2 native wins. Panes are resizable columns of real <webview>s.
+// Phase 2 adds: target=_blank -> new pane (via main), native find-in-page (webview.findInPage),
+// per-pane zoom, and per-pane mute -- all built-in webview APIs the extension has to fake.
 
 const grid = document.getElementById('grid');
 const hoverEl = document.getElementById('hoverurl');
@@ -30,53 +29,89 @@ const BAR = `
     <input class="addr" type="text" spellcheck="false" autocomplete="off"
            aria-label="Address" placeholder="Search or enter address" />
     <span class="spin" hidden aria-hidden="true"></span>
-    <button class="nav split" title="Split &mdash; new pane (Ctrl+T)" aria-label="New pane">+</button>
+    <button class="nav mute" title="Mute pane (Ctrl+M)" aria-label="Mute pane" hidden>&#128266;</button>
+    <button class="nav split" title="New pane (Ctrl+T)" aria-label="New pane">+</button>
     <button class="nav close" title="Close pane (Ctrl+W)" aria-label="Close pane">&#215;</button>
+  </div>`;
+
+const FINDBAR = `
+  <div class="findbar" hidden>
+    <input class="find-input" type="text" spellcheck="false" placeholder="Find in page" aria-label="Find in page" />
+    <span class="find-count" aria-live="polite"></span>
+    <button class="find-btn find-prev" title="Previous (Shift+Enter)" aria-label="Previous">&#8593;</button>
+    <button class="find-btn find-next" title="Next (Enter)" aria-label="Next">&#8595;</button>
+    <button class="find-btn find-close" title="Close (Esc)" aria-label="Close find">&#215;</button>
   </div>`;
 
 function makePane(url = HOME, beforeEl = null) {
   const el = document.createElement('section');
   el.className = 'pane';
   el.style.flexGrow = '1';
-  el.innerHTML = BAR + '<webview class="view" partition="persist:split" allowpopups></webview>';
+  el.innerHTML = BAR + FINDBAR + '<webview class="view" partition="persist:split" allowpopups></webview>';
   grid.insertBefore(el, beforeEl);
 
   const view = el.querySelector('.view');
   const addr = el.querySelector('.addr');
   const spin = el.querySelector('.spin');
   const fav = el.querySelector('.fav');
-  const pane = { el, view, addr, title: '' };
+  const muteBtn = el.querySelector('.mute');
+  const findbar = el.querySelector('.findbar');
+  const findInput = el.querySelector('.find-input');
+  const findCount = el.querySelector('.find-count');
+  const pane = { el, view, addr, title: '', zoom: 1, muted: false };
   panes.push(pane);
 
   view.setAttribute('src', url);
-
   const syncAddr = () => { const u = view.getURL(); if (u && u !== 'about:blank') addr.value = u; };
 
+  // --- address + navigation ---
   addr.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { const u = normalize(addr.value); if (u) view.loadURL(u); view.focus(); }
   });
   addr.addEventListener('focus', () => { activePane = pane; addr.select(); });
   el.addEventListener('mousedown', () => { activePane = pane; }, true);
-
   el.querySelector('.back').addEventListener('click', () => { if (view.canGoBack()) view.goBack(); });
   el.querySelector('.fwd').addEventListener('click', () => { if (view.canGoForward()) view.goForward(); });
   el.querySelector('.reload').addEventListener('click', () => view.reload());
   el.querySelector('.split').addEventListener('click', () => {
-    const p = makePane(HOME, el.nextElementSibling);  // insert right after this pane
-    rebuildGutters(); p.addr.focus();
+    const p = makePane(HOME, el.nextElementSibling); rebuildGutters(); p.addr.focus();
   });
   el.querySelector('.close').addEventListener('click', () => closePane(pane));
 
+  // --- find in page (native) ---
+  pane.openFind = () => { findbar.hidden = false; findInput.focus(); findInput.select();
+    if (findInput.value) view.findInPage(findInput.value); };
+  pane.closeFind = () => { findbar.hidden = true; findCount.textContent = ''; view.stopFindInPage('clearSelection'); view.focus(); };
+  findInput.addEventListener('input', () => {
+    if (findInput.value) view.findInPage(findInput.value);
+    else { view.stopFindInPage('clearSelection'); findCount.textContent = ''; }
+  });
+  findInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); if (findInput.value) view.findInPage(findInput.value, { findNext: true, forward: !e.shiftKey }); }
+    else if (e.key === 'Escape') { e.preventDefault(); pane.closeFind(); }
+  });
+  el.querySelector('.find-prev').addEventListener('click', () => { if (findInput.value) view.findInPage(findInput.value, { findNext: true, forward: false }); });
+  el.querySelector('.find-next').addEventListener('click', () => { if (findInput.value) view.findInPage(findInput.value, { findNext: true, forward: true }); });
+  el.querySelector('.find-close').addEventListener('click', () => pane.closeFind());
+  view.addEventListener('found-in-page', (e) => {
+    const r = e.result; findCount.textContent = r.matches ? r.activeMatchOrdinal + '/' + r.matches : 'no matches';
+  });
+
+  // --- zoom + mute (native, per pane) ---
+  pane.setZoom = (z) => { pane.zoom = Math.max(0.4, Math.min(3, z)); view.setZoomFactor(pane.zoom); };
+  pane.toggleMute = () => { pane.muted = !pane.muted; view.setAudioMuted(pane.muted);
+    muteBtn.hidden = false; muteBtn.innerHTML = pane.muted ? '&#128263;' : '&#128266;'; };
+  muteBtn.addEventListener('click', pane.toggleMute);
+  view.addEventListener('media-started-playing', () => { muteBtn.hidden = false; });
+
+  // --- native page events ---
   view.addEventListener('did-navigate', syncAddr);
   view.addEventListener('did-navigate-in-page', syncAddr);
   view.addEventListener('dom-ready', syncAddr);
   view.addEventListener('did-start-loading', () => { spin.hidden = false; });
   view.addEventListener('did-stop-loading', () => { spin.hidden = true; syncAddr(); });
   view.addEventListener('page-title-updated', (e) => { pane.title = e.title; updateTitle(); });
-  view.addEventListener('page-favicon-updated', (e) => {
-    const f = (e.favicons || [])[0];
-    if (f) { fav.src = f; fav.hidden = false; }
-  });
+  view.addEventListener('page-favicon-updated', (e) => { const f = (e.favicons || [])[0]; if (f) { fav.src = f; fav.hidden = false; } });
   view.addEventListener('update-target-url', (e) => { hoverEl.textContent = e.url || ''; });
   fav.addEventListener('error', () => { fav.hidden = true; });
 
@@ -93,7 +128,6 @@ function closePane(pane) {
   updateTitle();
 }
 
-// gutters live between adjacent panes; rebuilt on every add/remove
 function rebuildGutters() {
   grid.querySelectorAll('.gutter').forEach((g) => g.remove());
   const paneEls = [...grid.querySelectorAll('.pane')];
@@ -118,12 +152,9 @@ function startDrag(e) {
   const combinedGrow = (parseFloat(leftEl.style.flexGrow) || 1) + (parseFloat(rightEl.style.flexGrow) || 1);
   const startX = e.clientX;
   const startLeftPx = leftEl.offsetWidth;
-
-  // a full-window shield so the webviews don't swallow the drag
   const shield = document.createElement('div');
   shield.className = 'drag-shield';
   document.body.appendChild(shield);
-
   const onMove = (ev) => {
     let leftPx = startLeftPx + (ev.clientX - startX);
     leftPx = Math.max(90, Math.min(combinedPx - 90, leftPx));
@@ -131,11 +162,7 @@ function startDrag(e) {
     leftEl.style.flexGrow = (combinedGrow * ratio).toFixed(4);
     rightEl.style.flexGrow = (combinedGrow * (1 - ratio)).toFixed(4);
   };
-  const onUp = () => {
-    shield.remove();
-    window.removeEventListener('mousemove', onMove);
-    window.removeEventListener('mouseup', onUp);
-  };
+  const onUp = () => { shield.remove(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
   window.addEventListener('mousemove', onMove);
   window.addEventListener('mouseup', onUp);
 }
@@ -147,18 +174,32 @@ function updateTitle() {
 function updateInfo() {
   infoEl.textContent = panes.length + (panes.length === 1 ? ' pane' : ' panes') + ' · Split';
 }
+const active = () => activePane || panes[0];
 
-// shell-level keyboard shortcuts (the shell-reload/close keys are neutralized in main.js)
-window.addEventListener('keydown', (e) => {
-  if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
-  const k = e.key.toLowerCase();
-  if (k === 'l') { e.preventDefault(); (activePane || panes[0])?.addr.focus(); }
-  else if (k === 't') { e.preventDefault(); const p = makePane(HOME); rebuildGutters(); p.addr.focus(); }
-  else if (k === 'w') { e.preventDefault(); if (activePane || panes[0]) closePane(activePane || panes[0]); }
-  else if (k === 'r') { e.preventDefault(); (activePane || panes[0])?.view.reload(); }
+// shell shortcuts arrive from main.js (forwarded so they fire even while a webview has
+// focus, since webview key events don't bubble to the host). Each routes to the active pane.
+function handleShortcut(k) {
+  const p = active();
+  if (k === 'l') p?.addr.focus();
+  else if (k === 't') { const np = makePane(HOME); rebuildGutters(); np.addr.focus(); }
+  else if (k === 'w') { if (p) closePane(p); }
+  else if (k === 'r') p?.view.reload();
+  else if (k === 'f') p?.openFind();
+  else if (k === 'm') p?.toggleMute();
+  else if (k === '=' || k === '+') { if (p) p.setZoom(p.zoom + 0.1); }
+  else if (k === '-') { if (p) p.setZoom(p.zoom - 0.1); }
+  else if (k === '0') p?.setZoom(1);
+}
+window.splitAPI?.onShortcut(handleShortcut);
+
+// a page opening target=_blank / window.open -> a new pane beside the active one (via main.js)
+window.splitAPI?.onOpenPane((url) => {
+  const p = makePane(url, active() ? active().el.nextElementSibling : null);
+  rebuildGutters();
+  activePane = p;
 });
 
-// boot: two panes on sites an iframe can't embed -- now closable, splittable, resizable
+// boot: two panes on sites an iframe can only frame by gutting their CSP -- now first-class views
 makePane('https://github.com');
 makePane('https://dashboard.stripe.com');
 rebuildGutters();

@@ -1,4 +1,4 @@
-# Split (standalone) — Phase 1 (tiling shell)
+# Split (standalone) — Phases 0–2
 
 Lifting the **Split Screen** extension's tiling UI onto a real browser shell:
 **Electron + `<webview>`**. A `<webview>` is a real Chromium view, not an iframe — so it
@@ -23,9 +23,15 @@ npm start
 - **Split** — the `+` on a pane's toolbar (or `Ctrl+T`) opens a new pane to its right.
 - **Close** — the `×` (or `Ctrl+W`); the last pane always stays.
 - **Resize** — drag the gutter between two panes.
+- **Find in page** — `Ctrl+F` (native `webview.findInPage` — real highlights + match count).
+- **Zoom** — `Ctrl+=` / `Ctrl+-` / `Ctrl+0`, per pane.
+- **Mute** — `Ctrl+M`, or the speaker button that appears when a pane plays audio.
+- **Open in new pane** — a `target=_blank` link or popup opens a **new pane**, not a window.
 - **Focus address** `Ctrl+L` · **Reload pane** `Ctrl+R`.
 
-Logins persist (all panes share the `persist:split` session).
+Shortcuts fire even while a page has focus (they're forwarded from the main process, since
+webview key events don't bubble to the host). Logins persist (all panes share the
+`persist:split` session).
 
 ## What's native here that the extension fakes
 
@@ -37,8 +43,8 @@ Logins persist (all panes share the `persist:split` session).
 
 ## Not yet (later phases)
 
-`target=_blank` → new-pane (Phase 2); workspaces, bookmarks store, history, downloads,
-settings (Phases 3–4). The grid is columns-only for now — 2-D splits come later.
+Workspaces, bookmarks store, history + address autocomplete, downloads, settings
+(Phases 3–4). The grid is columns-only for now — 2-D splits come later.
 
 ## Security notes
 
