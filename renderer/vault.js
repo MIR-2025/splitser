@@ -241,39 +241,59 @@ async function resetVault() {
   key = null; entries = []; salt = null; iter = ITER; hasVault = false;
   clearTimeout(lockTimer); refreshAllKeys(); render();   // hasVault=false -> renderSetup()
 }
+let toastEl;
+function vToast(msg) {
+  if (!toastEl) { toastEl = document.createElement('div'); toastEl.className = 'v-toast'; document.body.appendChild(toastEl); }
+  toastEl.textContent = msg; toastEl.classList.add('on');
+  clearTimeout(vToast._t); vToast._t = setTimeout(() => toastEl.classList.remove('on'), 1500);
+}
+function copied(btn, msg) {                       // inline "✓" on the button + a toast, so a copy is never silent
+  const orig = btn.textContent;
+  btn.textContent = '✓'; btn.classList.add('ok');
+  clearTimeout(btn._t); btn._t = setTimeout(() => { btn.textContent = orig; btn.classList.remove('ok'); }, 1100);
+  vToast(msg);
+}
+function rowHtml(e, i) {
+  return `<div class="v-row" data-i="${i}">
+        <div class="v-row-main"><span class="v-row-t">${esc(e.name || e.url)}</span><span class="v-row-u">${esc(e.username)} · ${esc(hostOf(e.url) || e.url)}</span></div>
+        <button class="v-mini" data-act="user" data-i="${i}" title="Copy username">user</button>
+        <button class="v-mini" data-act="pass" data-i="${i}" title="Copy password">pass</button>
+        <button class="v-mini" data-act="fill" data-i="${i}" title="Fill active pane">&#128273;</button>
+        <button class="v-mini danger" data-act="del" data-i="${i}" title="Delete">&#215;</button>
+      </div>`;
+}
+// only the ROWS re-render on search -- never the <input> -- so the caret stays put (no "backwards" typing)
+function renderRows(filter) {
+  const f = (filter || '').toLowerCase();
+  const box = bodyEl.querySelector('.v-list'); if (!box) return;
+  const list = entries.map((e, i) => ({ e, i })).filter(({ e }) => !f || (e.name + ' ' + e.url + ' ' + e.username).toLowerCase().includes(f));
+  box.innerHTML = list.length ? list.map(({ e, i }) => rowHtml(e, i)).join('') : '<p class="v-hint">No entries. Add one, capture from a page, or import a CSV.</p>';
+}
 function renderList(filter = '') {
-  const f = filter.toLowerCase();
-  const list = entries.map((e, i) => ({ e, i })).filter(({ e }) => !f || (e.name + e.url + e.username).toLowerCase().includes(f));
   bodyEl.innerHTML = `
     <div class="v-top">
       <input class="v-in v-search" id="v-search" placeholder="Search ${entries.length} entries" value="${esc(filter)}" />
       <button class="v-icon" id="v-add" title="Add entry">+</button>
       <button class="v-icon" id="v-lock" title="Lock">&#128274;</button>
     </div>
-    <div class="v-list">${list.length ? list.map(({ e, i }) => `
-      <div class="v-row" data-i="${i}">
-        <div class="v-row-main"><span class="v-row-t">${esc(e.name || e.url)}</span><span class="v-row-u">${esc(e.username)} · ${esc(hostOf(e.url) || e.url)}</span></div>
-        <button class="v-mini" data-act="user" data-i="${i}" title="Copy username">user</button>
-        <button class="v-mini" data-act="pass" data-i="${i}" title="Copy password">pass</button>
-        <button class="v-mini" data-act="fill" data-i="${i}" title="Fill active pane">&#128273;</button>
-        <button class="v-mini danger" data-act="del" data-i="${i}" title="Delete">&#215;</button>
-      </div>`).join('') : '<p class="v-hint">No entries. Add one, capture from a page, or import a CSV.</p>'}</div>
+    <div class="v-list"></div>
     <div class="v-foot">
       <button class="v-btn" id="v-capture">+ From current page</button>
       <label class="v-btn" for="v-csv">Import CSV</label><input type="file" id="v-csv" accept=".csv" hidden />
     </div>`;
-  bodyEl.querySelector('#v-search').oninput = (e) => { armLock(); renderList(e.target.value); bodyEl.querySelector('#v-search').focus(); };
+  renderRows(filter);
+  bodyEl.querySelector('#v-search').oninput = (e) => { armLock(); renderRows(e.target.value); };
   bodyEl.querySelector('#v-add').onclick = () => openAdd();
   bodyEl.querySelector('#v-lock').onclick = lock;
   bodyEl.querySelector('#v-capture').onclick = () => { const p = getActive(); if (p) captureFromPane(p); };
   bodyEl.querySelector('#v-csv').onchange = async (e) => { const file = e.target.files[0]; if (!file) return; const text = await file.text(); const imp = fromPasswordCSV(text); if (imp.length) { entries = entries.concat(imp); await persist(); render(); refreshAllKeys(); } };
   bodyEl.querySelector('.v-list').onclick = async (e) => {
     const btn = e.target.closest('.v-mini'); if (!btn) return; armLock();
-    const i = +btn.dataset.i, ent = entries[i];
-    if (btn.dataset.act === 'user') api.clipboardWrite(ent.username);
-    else if (btn.dataset.act === 'pass') api.clipboardWrite(ent.password);
+    const i = +btn.dataset.i, ent = entries[i]; if (!ent) return;
+    if (btn.dataset.act === 'user') { api.clipboardWrite(ent.username); copied(btn, 'Username copied'); }
+    else if (btn.dataset.act === 'pass') { api.clipboardWrite(ent.password); copied(btn, 'Password copied — clears in ~25s'); }
     else if (btn.dataset.act === 'fill') { const p = getActive(); if (p) fill(p.view, ent); }
-    else if (btn.dataset.act === 'del') { entries.splice(i, 1); await persist(); renderList(filter); refreshAllKeys(); }
+    else if (btn.dataset.act === 'del') { entries.splice(i, 1); await persist(); renderList((bodyEl.querySelector('#v-search') || {}).value || ''); refreshAllKeys(); }
   };
 }
 function openAdd(pre) {
