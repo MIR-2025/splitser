@@ -110,12 +110,22 @@ function createWindow() {
     }
   });
   win.setMenuBarVisibility(false);
-  // give every pane's <webview> a tiny preload that reports login submissions to the host so the
-  // vault can offer to save them (set from main, so a page can't spoof or replace it)
-  win.webContents.on('will-attach-webview', (_e, webPreferences) => {
+  // Authoritatively harden every pane's <webview> from MAIN, so a future renderer bug/XSS can't
+  // hand hostile content Node access. Force the safe prefs (don't merely rely on defaults), pin the
+  // preload (a page can't spoof/replace it), and drop dangerous <webview> attributes if any appear.
+  win.webContents.on('will-attach-webview', (_e, webPreferences, params) => {
     webPreferences.preload = path.join(__dirname, 'webview-preload.cjs');
+    webPreferences.nodeIntegration = false;
+    webPreferences.nodeIntegrationInSubFrames = false;
+    webPreferences.contextIsolation = true;
+    webPreferences.sandbox = true;
+    webPreferences.webSecurity = true;
+    if (params) { delete params.nodeintegration; delete params.nodeintegrationinsubframes; delete params.webpreferences; delete params.disablewebsecurity; delete params.plugins; }
   });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  // the privileged host frame holds splitAPI -> the vault; it must never leave its local page
+  win.webContents.on('will-navigate', (e) => e.preventDefault());
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   wireShortcuts(win.webContents);
 }
 
@@ -178,23 +188,35 @@ app.whenReady().then(() => {
   initAdblock();
 
   // downloads: save to the Downloads folder, stream progress to the renderer
+  const dlDir = app.getPath('downloads');
   let dlId = 0;
   ses.on('will-download', (_e, item) => {
     const id = ++dlId;
-    const name = item.getFilename();
-    item.setSavePath(path.join(app.getPath('downloads'), name));
+    const name = path.basename(item.getFilename() || 'download');   // server-controlled -> basename only, no traversal
+    let dest = path.join(dlDir, name);
+    if (fs.existsSync(dest)) {                                       // don't silently overwrite an existing file
+      const ext = path.extname(name), base = name.slice(0, name.length - ext.length);
+      let i = 1; do { dest = path.join(dlDir, base + ' (' + (i++) + ')' + ext); } while (fs.existsSync(dest));
+    }
+    item.setSavePath(dest);
+    const finalName = path.basename(dest);
     const emit = (state) => win && win.webContents.send('download-update', {
-      id, name, received: item.getReceivedBytes(), total: item.getTotalBytes(), state
+      id, name: finalName, received: item.getReceivedBytes(), total: item.getTotalBytes(), state
     });
     item.on('updated', (_ev, s) => emit(s));
     item.once('done', (_ev, s) => emit(s));
     emit('progressing');
   });
 
-  // permission prompts for sensitive capabilities; benign ones auto-allow
-  const SENSITIVE = new Set(['media', 'geolocation', 'notifications', 'midi', 'midiSysex', 'pointerLock']);
+  // Permissions: default-DENY. Only a couple of harmless ones auto-allow; a known-sensitive set
+  // prompts; everything else (clipboard-READ, display-capture, usb/serial/hid, idle-detection,
+  // window-management, ...) is denied outright. This closes the clipboard-read path a hostile page
+  // could use to lift a vault password the user just copied.
+  const AUTO_ALLOW = new Set(['fullscreen', 'clipboard-sanitized-write']);
+  const PROMPT = new Set(['media', 'geolocation', 'notifications', 'midi', 'midiSysex', 'pointerLock']);
   ses.setPermissionRequestHandler(async (wc, permission, callback, details) => {
-    if (!SENSITIVE.has(permission)) return callback(true);
+    if (AUTO_ALLOW.has(permission)) return callback(true);
+    if (!PROMPT.has(permission)) return callback(false);   // default-deny everything else
     const { response } = await dialog.showMessageBox(win, {
       type: 'question', buttons: ['Block', 'Allow'], defaultId: 0, cancelId: 0,
       title: 'Splitser', message: 'Allow ' + permission + '?',
@@ -202,6 +224,9 @@ app.whenReady().then(() => {
     });
     callback(response === 1);
   });
+  // The sync permission CHECK gates the async Clipboard API (clipboard-read) and permissions.query;
+  // only the auto-allow set passes here, so clipboard-read is denied even without a request prompt.
+  ses.setPermissionCheckHandler((_wc, permission) => AUTO_ALLOW.has(permission));
 
   // a page opening a popup / target=_blank -> a new PANE; shortcuts on every webview
   app.on('web-contents-created', (_e, contents) => {

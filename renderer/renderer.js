@@ -24,6 +24,7 @@ let SETTINGS = { home: 'https://duckduckgo.com', search: 'https://duckduckgo.com
 function normalize(s) {
   s = s.trim();
   if (!s) return null;
+  if (/^(javascript|data|blob|vbscript):/i.test(s)) return SETTINGS.search.replace('%s', encodeURIComponent(s));  // never navigate the bar to a script/data URL
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) return s;
   if (/^localhost(:\d+)?(\/|$)/.test(s)) return 'http://' + s;
   if (/^\d{1,3}(\.\d{1,3}){3}(:\d+)?(\/|$)/.test(s)) return 'http://' + s;
