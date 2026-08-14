@@ -9,7 +9,7 @@
     "start": "electron . --no-sandbox"
   },
   "devDependencies": {
-    "electron": "^32.0.0"
+    "electron": "^43.4.0"
   },
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.18.2"

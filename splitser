@@ -39,6 +39,9 @@ case "${1:-start}" in
     pid=$(running_pid)
     if [ -n "$pid" ]; then echo "Splitser is already running (pid $pid)."; exit 0; fi
     cd "$APP" || exit 1
+    # --no-sandbox is required ON THIS BOX, not by choice: the app lives on a nosuid /media mount
+    # (so chrome-sandbox's SUID bit is ignored) AND Ubuntu 24.04's apparmor_restrict_unprivileged_userns=1
+    # blocks the namespace sandbox. Fix = enable unprivileged userns, OR move the app to a suid mount.
     setsid nohup "$ELEC" . --no-sandbox >"$LOG" 2>&1 </dev/null &
     echo "Splitser started, detached -- you can close this terminal now."
     echo "  log:  $LOG"
