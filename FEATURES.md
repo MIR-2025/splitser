@@ -49,15 +49,27 @@ login doesn't hand a third-party extension read/write access across every site y
 - Address bar: URL or search (configurable engine). Real per-pane back / forward / reload / history.
 - **History-backed address autocomplete** (type → matches drop down, ↑/↓/Enter).
 - Native **find-in-page** (`Ctrl+F`) — real highlight + match count + next/prev.
-- Per-pane **zoom** (`Ctrl+=` / `-` / `0`) and **mute** (`Ctrl+M`).
+- Per-pane **zoom** (`Ctrl+=` / `-` / `0`), **mute** (`Ctrl+M`), and **print** (`Ctrl+P`, prints the focused pane).
+- **Right-click context menu** on web content: back/forward/reload, open link in new pane / new tab,
+  copy link, image open/copy/save, cut/copy/paste in fields, "Search for …", inspect element.
+- **Focus indicator** — an accent line marks the pane that has focus.
 - Hovered-link URL in the status bar. Shortcuts fire even while a page has focus.
+
+## Shields (ad + tracker blocking) — Built
+- **On by default.** EasyList / EasyPrivacy-class filtering via the Ghostery engine, applied at
+  the session level — blocks ad + tracker requests (not just cosmetics). Engine caches locally
+  after a one-time fetch.
+- Per-pane `🛡` with a **live count** of what was blocked on the active page; a popover gives a
+  **per-site** toggle (allowlist a host) and a global on/off. Both persist.
 
 ## Browser data — Built
 - **Bookmarks** (`Ctrl+D` / star; a `★` panel to open/remove).
-- **Session restore** — reopens the panes you had open on relaunch.
-- **Downloads** — saved to the OS Downloads folder; a `↓` panel tracks progress.
-- **Permission prompts** — native allow/deny for camera / mic / geolocation / notifications.
+- **Session restore** — reopens the sets/panes/tabs you had open on relaunch.
+- **Downloads** — saved to the OS Downloads folder (server-set name is basename-only + collision-safe); a `↓` panel tracks progress.
+- **HTTP auth** — sites/dev servers behind Basic/Digest auth get an in-app sign-in dialog, prefilled from the vault.
+- **Permission prompts** — native allow/deny for camera / mic / geolocation / notifications; everything else defaults to deny.
 - **Settings** — home page, search engine, clear history/bookmarks/session.
+- **Theme** — colour presets, one-click "looks", a photographic backdrop banner behind the chrome, dim slider, custom accent/image.
 - All local: JSON in the app's userData. No server, no account, no sync, no telemetry.
 
 ## Password vault — Built

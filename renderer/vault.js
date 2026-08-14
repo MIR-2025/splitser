@@ -56,6 +56,31 @@ function fromPasswordCSV(text) {
 }
 function hostOf(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } }
 
+// A curated subset of the public suffix list -- shared hosting/registry suffixes where every
+// subdomain is a different owner. Autofill must NOT treat these as a registrable domain, or a
+// credential saved for e.g. github.io would offer on any *.github.io. (Not the full ICANN PSL;
+// the renderer can't pull node_modules, and this is a LOW/self-only finding -- covers the cases
+// a user realistically saves logins under.)
+const PUBLIC_SUFFIXES = new Set([
+  'co.uk', 'org.uk', 'gov.uk', 'ac.uk', 'com.au', 'net.au', 'org.au', 'co.nz', 'co.za', 'co.jp',
+  'co.in', 'co.kr', 'com.br', 'com.mx', 'com.sg', 'com.hk', 'com.tr',
+  'github.io', 'gitlab.io', 'githubusercontent.com', 'pages.dev', 'workers.dev', 'r2.dev',
+  'vercel.app', 'netlify.app', 'netlify.com', 'web.app', 'firebaseapp.com', 'appspot.com',
+  'herokuapp.com', 'onrender.com', 'fly.dev', 'glitch.me', 'repl.co', 'replit.dev', 'surge.sh',
+  'now.sh', 'vsites.app', 'ngrok.io', 'ngrok-free.app', 'trycloudflare.com', 'cloudfront.net',
+  's3.amazonaws.com', 'azurewebsites.net', 'blob.core.windows.net', 'wordpress.com', 'blogspot.com',
+  'myshopify.com', 'sharepoint.com', 'zendesk.com', 'freshdesk.com', 'atlassian.net', 'notion.site',
+  'substack.com', 'medium.com', 'sites.google.com', 'translate.goog'
+]);
+// true if the page host and a saved entry's host belong to the same registrable domain
+function hostMatch(h, eh) {
+  if (!h || !eh) return false;
+  if (h === eh) return true;
+  if (h.endsWith('.' + eh)) return !PUBLIC_SUFFIXES.has(eh);   // entry host is a suffix of the page: ok unless it's public
+  if (eh.endsWith('.' + h)) return !PUBLIC_SUFFIXES.has(h);
+  return false;
+}
+
 // ---- fill / capture scripts injected into a pane's webview ----
 function fillScript(user, pass) {
   return `(function(u,p){
@@ -122,12 +147,12 @@ function lock() { key = null; entries = []; clearTimeout(lockTimer); render(); r
 
 function matchesForUrl(url) {
   const h = hostOf(url); if (!h) return [];
-  return entries.filter((e) => { const eh = hostOf(e.url); return eh && (eh === h || h.endsWith('.' + eh) || eh.endsWith('.' + h)); });
+  return entries.filter((e) => hostMatch(h, hostOf(e.url)));
 }
 // credentials for a bare host (used to prefill the HTTP-auth dialog); null if locked or no match
 function credsForHost(host) {
   if (!unlocked() || !host) return null;
-  const m = entries.find((e) => { const eh = hostOf(e.url); return eh && (eh === host || host.endsWith('.' + eh) || eh.endsWith('.' + host)); });
+  const m = entries.find((e) => hostMatch(host, hostOf(e.url)));
   return m ? { username: m.username || '', password: m.password || '' } : null;
 }
 
