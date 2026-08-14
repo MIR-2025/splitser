@@ -11,8 +11,9 @@ plus everything a browser owns.
 
 **Why not just the extension:** the extension frames sites in iframes (needs to strip
 XFO/CSP, breaks on JS-framebusting sites, depends on third-party cookies that are being
-killed, and *cannot autofill*). Splitser's panes are real top-level views: first-party
-cookies, reaches framebusting sites, no header-stripping, and it can autofill.
+killed). Splitser's panes are real top-level views: first-party cookies, reaches
+framebusting sites, no header-stripping. And its vault is *part of the browser* — filling a
+login doesn't hand a third-party extension read/write access across every site you tile.
 
 ## Tiling & panes — Built
 - Dynamic panes: **resizable columns** (default — drag the gutter to resize) plus **2×2 and
@@ -69,8 +70,10 @@ cookies, reaches framebusting sites, no header-stripping, and it can autofill.
   appears **anchored under the field**; click one to fill both username + password (the `🔑`
   status button also fills the active pane, with a chooser when several match). Values are set
   through the native input setter so **React/Vue forms register the change and enable their
-  submit button** — that's why logins like Stripe fill correctly. *This is what the extension
-  structurally cannot do.*
+  submit button** — that's why logins like Stripe fill correctly. An extension *can* fill logins
+  too (a content script with `all_frames`); the honest difference is the **permission surface** —
+  the vault is part of the browser, so no third party gets read/write across every site you tile,
+  and the key never leaves the isolated renderer.
 - **Offer to save** — when you submit a login in any pane, Splitser offers to save it: an
   in-pane bar (`Save password for <host>?`) appears, or `Update…?` if the password changed,
   and it stays quiet if that login is already stored. A tiny per-webview preload (set from
