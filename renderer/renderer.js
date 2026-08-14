@@ -719,7 +719,33 @@ api.onDownload((d) => {
     return `<div class="row"><span class="row-t">${esc(x.name)}</span><span class="row-u">${status}</span>` +
       `<div class="dl-bar"><i style="width:${x.state === 'completed' ? 100 : pct}%"></i></div></div>`;
   }).join('');
+  showDlToast(d);                                   // visible feedback -- downloads shouldn't be silent
 });
+// slide-in toast per download: progress while going, then "Downloaded" with Open / Show-in-folder
+function showDlToast(d) {
+  let host = document.getElementById('dl-toasts');
+  if (!host) { host = document.createElement('div'); host.id = 'dl-toasts'; document.body.appendChild(host); }
+  let el = document.getElementById('dlt-' + d.id);
+  if (!el) { el = document.createElement('div'); el.className = 'dl-toast'; el.id = 'dlt-' + d.id; host.appendChild(el); }
+  const pct = d.total ? Math.round(d.received / d.total * 100) : 0;
+  const done = d.state === 'completed';
+  const failed = d.state === 'interrupted' || d.state === 'cancelled';
+  el.classList.toggle('done', done); el.classList.toggle('failed', failed);
+  const status = done ? 'Downloaded' : failed ? 'Download ' + d.state : (d.total ? pct + '% · ' + fmt(d.received) : fmt(d.received));
+  el.innerHTML =
+    '<div class="dlt-ico">' + (done ? '✓' : failed ? '✕' : '↓') + '</div>' +
+    '<div class="dlt-body"><div class="dlt-name" title="' + esc(d.name) + '">' + esc(d.name) + '</div>' +
+    '<div class="dlt-sub">' + status + '</div>' +
+    (done ? '<div class="dlt-actions"><button class="dlt-btn" data-a="open">Open</button><button class="dlt-btn" data-a="folder">Show in folder</button></div>' : '') +
+    '</div><button class="dlt-x" title="Dismiss">×</button>' +
+    (done || failed ? '' : '<div class="dlt-bar"><i style="width:' + pct + '%"></i></div>');
+  el.querySelector('.dlt-x').onclick = () => el.remove();
+  if (done) {
+    el.querySelector('[data-a="open"]').onclick = () => api.openDownload(d.path);
+    el.querySelector('[data-a="folder"]').onclick = () => api.revealDownload(d.path);
+  }
+  if (done || failed) { clearTimeout(el._t); el._t = setTimeout(() => el.remove(), done ? 12000 : 8000); }
+}
 
 // settings
 async function fillSettings() {

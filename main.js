@@ -144,7 +144,10 @@ ipcMain.on('session:set', (_e, urls) => store.setSession(urls));
 ipcMain.handle('settings:get', () => store.getSettings());
 ipcMain.handle('settings:set', (_e, patch) => store.setSettings(patch));
 ipcMain.handle('data:clear', (_e, kind) => store.clearData(kind));
+const dlPaths = new Set();   // full paths of files we've saved -- open/reveal is gated to these
 ipcMain.on('open-downloads', () => shell.openPath(app.getPath('downloads')));
+ipcMain.on('download:open', (_e, p) => { if (dlPaths.has(p)) shell.openPath(p); });
+ipcMain.on('download:reveal', (_e, p) => { if (dlPaths.has(p)) shell.showItemInFolder(p); });
 
 // vault: main only reads/writes the encrypted blob (never the key or plaintext)
 ipcMain.handle('vault:get', () => store.getVault());
@@ -192,7 +195,8 @@ app.whenReady().then(() => {
   initAdblock();
 
   // downloads: save to the Downloads folder, stream progress to the renderer
-  const dlDir = app.getPath('downloads');
+  const dlDir = process.env.SPLITSER_DL_DIR || app.getPath('downloads');   // env override lets tests isolate downloads
+  try { fs.mkdirSync(dlDir, { recursive: true }); } catch { /* Downloads already exists */ }
   let dlId = 0;
   ses.on('will-download', (_e, item) => {
     const id = ++dlId;
@@ -203,9 +207,10 @@ app.whenReady().then(() => {
       let i = 1; do { dest = path.join(dlDir, base + ' (' + (i++) + ')' + ext); } while (fs.existsSync(dest));
     }
     item.setSavePath(dest);
+    dlPaths.add(dest);                                               // gate open/reveal to files we actually saved
     const finalName = path.basename(dest);
     const emit = (state) => win && win.webContents.send('download-update', {
-      id, name: finalName, received: item.getReceivedBytes(), total: item.getTotalBytes(), state
+      id, name: finalName, path: dest, received: item.getReceivedBytes(), total: item.getTotalBytes(), state
     });
     item.on('updated', (_ev, s) => emit(s));
     item.once('done', (_ev, s) => emit(s));

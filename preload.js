@@ -36,6 +36,8 @@ contextBridge.exposeInMainWorld('splitAPI', {
   settingsSet: (patch) => ipcRenderer.invoke('settings:set', patch),
   clearData: (kind) => ipcRenderer.invoke('data:clear', kind),
   openDownloads: () => ipcRenderer.send('open-downloads'),
+  openDownload: (p) => ipcRenderer.send('download:open', p),      // open a finished download (main validates the path)
+  revealDownload: (p) => ipcRenderer.send('download:reveal', p),  // show it in the OS file manager
 
   // vault (main stores only the encrypted blob) + clipboard
   vaultGet: () => ipcRenderer.invoke('vault:get'),
