@@ -3,13 +3,60 @@
   "version": "0.1.0",
   "private": true,
   "description": "Splitser (splitser.org) -- a tiling browser: the Split Screen UI on Electron + <webview>.",
+  "author": "Richard Whitney <richard@whitneys.co>",
+  "homepage": "https://splitser.org",
   "type": "module",
   "main": "main.js",
   "scripts": {
-    "start": "electron . --no-sandbox"
+    "start": "electron . --no-sandbox",
+    "dist:linux": "electron-builder --linux deb rpm AppImage",
+    "dist:deb": "electron-builder --linux deb AppImage",
+    "dist:win": "electron-builder --win nsis",
+    "dist:mac": "electron-builder --mac dmg"
+  },
+  "build": {
+    "appId": "org.splitser.app",
+    "productName": "Splitser",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": [
+      "main.js",
+      "preload.js",
+      "webview-preload.cjs",
+      "store.js",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "linux": {
+      "target": ["deb", "rpm", "AppImage"],
+      "category": "Network",
+      "maintainer": "Richard Whitney <richard@whitneys.co>",
+      "synopsis": "A tiling browser -- your logged-in apps, side by side",
+      "description": "Splitser tiles real, logged-in websites side by side in resizable panes and grids, with named workspaces, per-workspace themes, a built-in password vault, and ad/tracker blocking.",
+      "icon": "build/icon.png"
+    },
+    "win": {
+      "target": ["nsis"],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Splitser"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.png"
+    },
+    "dmg": {
+      "title": "Splitser ${version}"
+    }
   },
   "devDependencies": {
-    "electron": "^43.4.0"
+    "electron": "^43.4.0",
+    "electron-builder": "^25.1.8"
   },
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.18.2"

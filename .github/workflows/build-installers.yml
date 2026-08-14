@@ -1,0 +1,50 @@
+name: build-installers
+
+# Build native installers on each platform's own runner:
+#   Linux  -> .deb, .rpm, .AppImage
+#   Windows-> .exe (NSIS)
+#   macOS  -> .dmg
+# Run manually (Actions tab -> Run workflow) or by pushing a v* tag.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            targets: --linux deb rpm AppImage
+            artifact: linux
+          - os: windows-latest
+            targets: --win nsis
+            artifact: windows
+          - os: macos-latest
+            targets: --mac dmg
+            artifact: macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Pin npm (avoid the broken npm@12 line)
+        run: npm i -g npm@11
+      - run: npm ci
+      - name: Build installers
+        run: npx electron-builder ${{ matrix.targets }} --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: splitser-${{ matrix.artifact }}
+          if-no-files-found: ignore
+          path: |
+            dist/*.deb
+            dist/*.rpm
+            dist/*.AppImage
+            dist/*.exe
+            dist/*.dmg
