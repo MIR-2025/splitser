@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('splitAPI', {
   onDownload: (cb) => ipcRenderer.on('download-update', (_e, d) => cb(d)),
   onShields: (cb) => ipcRenderer.on('shields-update', (_e, d) => cb(d)),
   onHttpAuth: (cb) => ipcRenderer.on('http-auth', (_e, d) => cb(d)),
+  onOpenTabIn: (cb) => ipcRenderer.on('open-tab-in', (_e, d) => cb(d)),
 
   // shields (ad/tracker blocking)
   shieldsGet: (wcId) => ipcRenderer.invoke('shields:get', wcId),

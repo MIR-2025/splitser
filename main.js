@@ -1,7 +1,7 @@
 // Splitser (splitser.org) — main process. Hosts the renderer UI with <webview> enabled
 // (real Chromium views, no header-strip), owns the data layer (history/bookmarks/session/
 // settings via store.js), and handles downloads + permission prompts on the shared session.
-import { app, BrowserWindow, ipcMain, session as electronSession, dialog, shell, clipboard, webContents } from 'electron';
+import { app, BrowserWindow, ipcMain, session as electronSession, dialog, shell, clipboard, webContents, Menu } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -49,9 +49,49 @@ async function initAdblock() {
   } catch (e) { console.error('[shields] could not load filter lists:', e && e.message); }
 }
 
+// right-click menu for web content
+function buildContextMenu(contents, p) {
+  const t = [];
+  const send = (ch, arg) => win && win.webContents.send(ch, arg);
+  const link = p.linkURL || '';
+  const img = (p.mediaType === 'image' && p.srcURL) ? p.srcURL : '';
+  const sel = (p.selectionText || '').trim();
+  t.push({ label: 'Back', enabled: contents.canGoBack(), click: () => contents.goBack() });
+  t.push({ label: 'Forward', enabled: contents.canGoForward(), click: () => contents.goForward() });
+  t.push({ label: 'Reload', click: () => contents.reload() });
+  if (link) {
+    t.push({ type: 'separator' });
+    t.push({ label: 'Open link in new pane', click: () => send('open-pane', link) });
+    t.push({ label: 'Open link in new tab', click: () => send('open-tab-in', { url: link, wcId: contents.id }) });
+    t.push({ label: 'Copy link address', click: () => clipboard.writeText(link) });
+  }
+  if (img) {
+    t.push({ type: 'separator' });
+    t.push({ label: 'Open image in new pane', click: () => send('open-pane', img) });
+    t.push({ label: 'Copy image', click: () => contents.copyImageAt(p.x, p.y) });
+    t.push({ label: 'Save image', click: () => contents.downloadURL(img) });
+  }
+  if (p.isEditable) {
+    t.push({ type: 'separator' });
+    t.push({ label: 'Cut', enabled: p.editFlags.canCut, click: () => contents.cut() });
+    t.push({ label: 'Copy', enabled: p.editFlags.canCopy, click: () => contents.copy() });
+    t.push({ label: 'Paste', enabled: p.editFlags.canPaste, click: () => contents.paste() });
+    t.push({ label: 'Select all', click: () => contents.selectAll() });
+  } else if (sel) {
+    t.push({ type: 'separator' });
+    t.push({ label: 'Copy', click: () => contents.copy() });
+    const q = sel.length > 24 ? sel.slice(0, 24) + '…' : sel;
+    const searchUrl = (store.getSettings().search || 'https://duckduckgo.com/?q=%s').replace('%s', encodeURIComponent(sel));
+    t.push({ label: 'Search for “' + q + '”', click: () => send('open-pane', searchUrl) });
+  }
+  t.push({ type: 'separator' });
+  t.push({ label: 'Inspect element', click: () => contents.inspectElement(p.x, p.y) });
+  return Menu.buildFromTemplate(t);
+}
+
 // Shell shortcuts intercepted on every webContents (host + each webview) so they fire even
 // while a page has focus (webview key events don't bubble to the host).
-const SHORTCUTS = new Set(['t', 'w', 'l', 'r', 'f', 'm', 'd', 'k', '1', '2', '3', '=', '+', '-', '0']);
+const SHORTCUTS = new Set(['t', 'w', 'l', 'r', 'f', 'm', 'd', 'k', 'p', '1', '2', '3', '=', '+', '-', '0']);
 function wireShortcuts(contents) {
   contents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown' || !(input.control || input.meta) || input.alt) return;
@@ -173,6 +213,7 @@ app.whenReady().then(() => {
     contents.on('did-start-navigation', (_ev, _u, isInPlace, isMainFrame) => {   // new page -> reset its block count
       if (isMainFrame && !isInPlace) { blocked.set(contents.id, 0); pushShields(contents.id); }
     });
+    contents.on('context-menu', (_ev, p) => buildContextMenu(contents, p).popup({ window: win }));
     wireShortcuts(contents);
   });
 

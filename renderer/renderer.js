@@ -31,6 +31,10 @@ function normalize(s) {
   return SETTINGS.search.replace('%s', encodeURIComponent(s));
 }
 const active = () => activePane || panes[0];
+function markActive() {   // visual focus indicator: accent the pane that has focus
+  document.querySelectorAll('.pane.active').forEach((p) => p.classList.remove('active'));
+  const p = active(); if (p && p.el) p.el.classList.add('active');
+}
 
 const BAR = `
   <div class="bar">
@@ -127,10 +131,10 @@ function makePane(url, beforeEl = null, tabUrls = null) {
     else if (e.key === 'Enter') { const chosen = pane.sugIdx >= 0 && pane.sugs[pane.sugIdx] ? pane.sugs[pane.sugIdx].url : normalize(addr.value); hideSuggest(pane); if (chosen && pane.view) pane.view.loadURL(chosen); if (pane.view) pane.view.focus(); }
     else if (e.key === 'Escape') { hideSuggest(pane); }
   });
-  addr.addEventListener('focus', () => { activePane = pane; addr.select(); });
+  addr.addEventListener('focus', () => { activePane = pane; markActive(); addr.select(); });
   addr.addEventListener('blur', () => setTimeout(() => hideSuggest(pane), 160));
   suggest.addEventListener('mousedown', (e) => { const item = e.target.closest('.sug'); if (!item) return; e.preventDefault(); hideSuggest(pane); if (pane.view) pane.view.loadURL(item.dataset.url); });
-  el.addEventListener('mousedown', () => { activePane = pane; }, true);
+  el.addEventListener('mousedown', () => { activePane = pane; markActive(); }, true);
   el.querySelector('.back').addEventListener('click', () => { if (pane.view && pane.view.canGoBack()) pane.view.goBack(); });
   el.querySelector('.fwd').addEventListener('click', () => { if (pane.view && pane.view.canGoForward()) pane.view.goForward(); });
   el.querySelector('.reload').addEventListener('click', () => pane.view && pane.view.reload());
@@ -193,6 +197,7 @@ function addTab(pane, url) {
     if (e.channel === 'vault:capture') Vault.offerSave(pane, e.args[0]);       // login submitted -> "save this?"
     else if (e.channel === 'vault:loginfocus') Vault.offerFill(pane, e.args[0]); // login field focused -> "prefill?"
     else if (e.channel === 'vault:loginblur') Vault.hideFill(pane);
+    else if (e.channel === 'pane-active') { activePane = pane; markActive(); }   // clicked into this pane's content
   });
   tfav.addEventListener('error', () => { tfav.hidden = true; });
 
@@ -412,7 +417,7 @@ function switchSet(s) {
   bindCur(s);
   sets.forEach((x) => { x.el.style.display = (x === s) ? '' : 'none'; });
   document.querySelectorAll('#layout-picker .lbtn').forEach((b) => b.classList.toggle('on', b.dataset.layout === s.layout));
-  renderSetbar(); updateTitle(); updateInfo();
+  renderSetbar(); updateTitle(); updateInfo(); markActive();
 }
 // build a set from saved specs (array of per-pane tab-URL arrays) without saving mid-build
 function buildSet(layout, paneSpecs) {
@@ -484,6 +489,7 @@ function handleShortcut(k) {
   else if (k === 'm') p?.toggleMute();
   else if (k === 'd') p?.toggleBookmark();
   else if (k === 'k') Vault.togglePanel();
+  else if (k === 'p') { try { p?.view.print(); } catch (e) { /* print may reject if the view isn't ready */ } }   // print the focused pane
   else if (k === '1') setLayout('cols', false);
   else if (k === '2') setLayout('g2x2', true);
   else if (k === '3') setLayout('g3x3', true);
@@ -495,6 +501,9 @@ api.onShortcut(handleShortcut);
 api.onOpenPane((url) => { const p = makePane(url, active() ? active().el.nextElementSibling : null); rebuildGutters(); saveSession(); activePane = p; });
 // live shield counts: route to whichever pane's ACTIVE tab this webContents is
 api.onShields((d) => { for (const s of sets) for (const p of s.panes) { if (p.activeTab && p.activeTab.wcId === d.wcId) { p.updateShield(d); return; } } });
+
+// "Open link in new tab" from the context menu -> a tab in the pane that was right-clicked
+api.onOpenTabIn((d) => { for (const s of sets) for (const p of s.panes) { if (p.activeTab && p.activeTab.wcId === d.wcId) { activePane = p; addTab(p, d.url); return; } } });
 
 // HTTP Basic/Digest auth: a site (or dev server) asked for credentials
 api.onHttpAuth((d) => showAuthDialog(d));
