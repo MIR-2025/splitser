@@ -365,6 +365,7 @@ function closePane(pane) {
 
 function rebuildGutters() {
   grid.querySelectorAll('.gutter').forEach((g) => g.remove());
+  if (currentLayout === 'split12') { applySplit12(); return; }
   if (currentLayout !== 'cols') { applyGrid(currentLayout); return; }   // grids re-place + re-divide
   const paneEls = [...grid.querySelectorAll('.pane')];
   paneEls.forEach((pe, idx) => {
@@ -422,11 +423,12 @@ function curDims() {   // [cols, rows] of the current set's arrangement (cols mo
 }
 function updateGridBtn() {   // footer "Grid: C×R" label reflects the current arrangement
   if (!gridDimsEl) return;
+  if (currentLayout === 'split12') { gridDimsEl.textContent = '1+2'; return; }
   const [C, R] = curDims(); gridDimsEl.textContent = C + '×' + R;
 }
 function updateInfo() {
   const [C, R] = curDims();
-  const lay = (C === 1 && R === 1) ? '' : ' · ' + C + '×' + R;
+  const lay = currentLayout === 'split12' ? ' · 1+2' : (C === 1 && R === 1) ? '' : ' · ' + C + '×' + R;
   const setPart = sets.length > 1 ? 'set ' + (sets.indexOf(cur) + 1) + '/' + sets.length + ' · ' : '';
   infoEl.textContent = 'Splitser · ' + setPart + panes.length + (panes.length === 1 ? ' pane' : ' panes') + lay;
   updateGridBtn();
@@ -456,6 +458,21 @@ function applyGrid(mode) {
   for (let r = 0; r < R - 1; r++) { const d = document.createElement('div'); d.className = 'gdiv y'; d.style.gridRow = String(r * 2 + 2); d.style.gridColumn = '1 / -1'; d.addEventListener('mousedown', (e) => startGridDrag(e, 'y', r)); grid.appendChild(d); }
   // diagonal handles where a column divider crosses a row divider: drag to resize both axes at once
   for (let c = 0; c < C - 1; c++) for (let r = 0; r < R - 1; r++) { const d = document.createElement('div'); d.className = 'gdiv xy'; d.style.gridColumn = String(c * 2 + 2); d.style.gridRow = String(r * 2 + 2); d.addEventListener('mousedown', (e) => startGridDragXY(e, c, r)); grid.appendChild(d); }
+  updateInfo();
+}
+// the Splitser-logo layout: one tall pane on the left + two stacked on the right (3 panes, asymmetric).
+// Left spans both rows; the row divider lives only in the right column. Reuses the fr-track drag machinery.
+function applySplit12() {
+  cur.gCols = frLoad('split12-c', 2); cur.gRows = frLoad('split12-r', 2);
+  grid.style.gap = '0'; grid.style.gridAutoRows = '';
+  grid.style.gridTemplateColumns = frTpl(cur.gCols);   // 1fr 6px 1fr
+  grid.style.gridTemplateRows = frTpl(cur.gRows);
+  if (panes[0]) { panes[0].el.style.gridColumn = '1'; panes[0].el.style.gridRow = '1 / -1'; }
+  if (panes[1]) { panes[1].el.style.gridColumn = '3'; panes[1].el.style.gridRow = '1'; }
+  if (panes[2]) { panes[2].el.style.gridColumn = '3'; panes[2].el.style.gridRow = '3'; }
+  grid.querySelectorAll('.gdiv').forEach((d) => d.remove());
+  const vx = document.createElement('div'); vx.className = 'gdiv x'; vx.style.gridColumn = '2'; vx.style.gridRow = '1 / -1'; vx.addEventListener('mousedown', (e) => startGridDrag(e, 'x', 0)); grid.appendChild(vx);   // columns divider (full height)
+  const hy = document.createElement('div'); hy.className = 'gdiv y'; hy.style.gridColumn = '3'; hy.style.gridRow = '2'; hy.addEventListener('mousedown', (e) => startGridDrag(e, 'y', 0)); grid.appendChild(hy);   // right-column row divider
   updateInfo();
 }
 function startGridDrag(e, axis, idx) {
@@ -510,7 +527,7 @@ function setPaneCount(n) {
 // count to the grid's cells. Operates on the CURRENT set. `save=false` while building sets at boot.
 function setLayout(mode, fill, save = true) {
   currentLayout = mode; if (cur) cur.layout = mode;
-  if (fill && mode !== 'cols') { const [C, R] = gridDims(mode); setPaneCount(C * R); }
+  if (fill) { if (mode === 'split12') setPaneCount(3); else if (mode !== 'cols') { const [C, R] = gridDims(mode); setPaneCount(C * R); } }
   [...grid.classList].filter((c) => c === 'gmode').forEach((c) => grid.classList.remove(c));
   if (mode === 'cols') {
     grid.style.gridTemplateColumns = ''; grid.style.gridTemplateRows = ''; grid.style.gap = ''; grid.style.gridAutoRows = '';
@@ -520,7 +537,7 @@ function setLayout(mode, fill, save = true) {
   } else {
     grid.querySelectorAll('.gutter').forEach((g) => g.remove());
     grid.classList.add('gmode');
-    applyGrid(mode);
+    if (mode === 'split12') applySplit12(); else applyGrid(mode);
   }
   updateGridBtn(); markActive();
   if (save) saveSession();
@@ -615,7 +632,7 @@ function setName(s, i) {   // a workspace's label: user-set name, else its first
   return h || ('Set ' + (i + 1));
 }
 // the split-pane brand mark, inlined so it needs no file/CSP round-trip; sits where the label was
-const LOGO_SVG = '<svg class="setbar-logo" viewBox="0 0 24 24" width="20" height="20" role="img" aria-label="Splitser"><title>Splitser</title>' +
+const LOGO_SVG = '<svg class="setbar-logo" viewBox="0 0 24 24" width="20" height="20" role="img" aria-label="Splitser -- the 1+2 layout"><title>Splitser -- click for the 1+2 layout</title>' +
   '<rect width="24" height="24" rx="5.4" fill="#0e1418"/>' +
   '<rect x="4.2" y="4.2" width="6.6" height="15.6" rx="1.2" fill="#5fe08a"/>' +
   '<rect x="11.7" y="4.2" width="8.1" height="7.3" rx="1.2" fill="#5fe08a"/>' +
@@ -645,6 +662,7 @@ function renameSet(s, pill) {
   input.addEventListener('click', (e) => e.stopPropagation());
 }
 setbar.addEventListener('click', (e) => {
+  if (e.target.closest('.setbar-logo')) return setLayout('split12', true);   // the logo IS a layout -- apply it
   if (e.target.closest('.setadd')) return newSet();
   const pill = e.target.closest('.setpill'); if (!pill) return;
   const i = +pill.dataset.i;
