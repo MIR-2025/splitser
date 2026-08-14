@@ -114,6 +114,22 @@ ipcMain.handle('shields:toggleSite', (_e, host) => {   // returns new on-state f
 });
 ipcMain.handle('shields:toggleAll', () => { shieldsOn = !shieldsOn; persistShields(); return shieldsOn; });
 
+// ---- HTTP Basic/Digest auth: forward the challenge to an in-app dialog, then answer it ----
+const pendingAuth = new Map();
+let authId = 0;
+app.on('login', (event, _contents, details, authInfo, callback) => {
+  event.preventDefault();                       // we'll answer via the renderer dialog
+  const id = ++authId;
+  pendingAuth.set(id, callback);
+  win && win.webContents.send('http-auth', { id, host: authInfo.host, port: authInfo.port, realm: authInfo.realm || '', isProxy: !!authInfo.isProxy, url: details.url || '' });
+});
+ipcMain.on('http-auth-reply', (_e, { id, username, password }) => {
+  const cb = pendingAuth.get(id); if (!cb) return;
+  pendingAuth.delete(id);
+  if (username == null) cb();                    // cancelled -> let it 401
+  else cb(username, password);
+});
+
 app.whenReady().then(() => {
   const ses = electronSession.fromPartition('persist:split');
 

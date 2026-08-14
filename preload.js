@@ -7,11 +7,15 @@ contextBridge.exposeInMainWorld('splitAPI', {
   onShortcut: (cb) => ipcRenderer.on('shortcut', (_e, key) => cb(key)),
   onDownload: (cb) => ipcRenderer.on('download-update', (_e, d) => cb(d)),
   onShields: (cb) => ipcRenderer.on('shields-update', (_e, d) => cb(d)),
+  onHttpAuth: (cb) => ipcRenderer.on('http-auth', (_e, d) => cb(d)),
 
   // shields (ad/tracker blocking)
   shieldsGet: (wcId) => ipcRenderer.invoke('shields:get', wcId),
   shieldsToggleSite: (host) => ipcRenderer.invoke('shields:toggleSite', host),
   shieldsToggleAll: () => ipcRenderer.invoke('shields:toggleAll'),
+
+  // HTTP auth dialog reply ({ id, username, password }; username null = cancel)
+  httpAuthReply: (r) => ipcRenderer.send('http-auth-reply', r),
 
   // history
   historyAdd: (entry) => ipcRenderer.send('history:add', entry),

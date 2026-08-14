@@ -496,6 +496,30 @@ api.onOpenPane((url) => { const p = makePane(url, active() ? active().el.nextEle
 // live shield counts: route to whichever pane's ACTIVE tab this webContents is
 api.onShields((d) => { for (const s of sets) for (const p of s.panes) { if (p.activeTab && p.activeTab.wcId === d.wcId) { p.updateShield(d); return; } } });
 
+// HTTP Basic/Digest auth: a site (or dev server) asked for credentials
+api.onHttpAuth((d) => showAuthDialog(d));
+function showAuthDialog(d) {
+  document.querySelectorAll('.auth-modal').forEach((m) => m.remove());
+  const pre = Vault.credsForHost(d.host) || { username: '', password: '' };
+  const where = (d.isProxy ? 'Proxy ' : '') + esc(d.host) + (d.port && d.port !== 80 && d.port !== 443 ? ':' + d.port : '');
+  const modal = document.createElement('div');
+  modal.className = 'auth-modal';
+  modal.innerHTML = '<div class="auth-box">' +
+    '<div class="auth-h">Sign in to ' + where + '</div>' +
+    (d.realm ? '<div class="auth-realm">' + esc(d.realm) + '</div>' : '') +
+    '<input class="auth-in" id="auth-user" placeholder="Username" autocomplete="off" />' +
+    '<input class="auth-in" id="auth-pass" type="password" placeholder="Password" />' +
+    '<div class="auth-row"><button class="auth-btn primary" id="auth-ok">Sign in</button><button class="auth-btn" id="auth-cancel">Cancel</button></div></div>';
+  document.body.appendChild(modal);
+  const user = modal.querySelector('#auth-user'), pass = modal.querySelector('#auth-pass');
+  user.value = pre.username; pass.value = pre.password;
+  (pre.username ? pass : user).focus();
+  const done = (ok) => { modal.remove(); api.httpAuthReply({ id: d.id, username: ok ? user.value : null, password: ok ? pass.value : '' }); };
+  modal.querySelector('#auth-ok').onclick = () => done(true);
+  modal.querySelector('#auth-cancel').onclick = () => done(false);
+  [user, pass].forEach((el) => el.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); done(true); } else if (e.key === 'Escape') done(false); }));
+}
+
 // ---- status-bar panels: bookmarks / downloads / settings ----
 const panelBM = document.getElementById('panel-bookmarks');
 const panelDL = document.getElementById('panel-downloads');

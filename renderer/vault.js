@@ -124,6 +124,12 @@ function matchesForUrl(url) {
   const h = hostOf(url); if (!h) return [];
   return entries.filter((e) => { const eh = hostOf(e.url); return eh && (eh === h || h.endsWith('.' + eh) || eh.endsWith('.' + h)); });
 }
+// credentials for a bare host (used to prefill the HTTP-auth dialog); null if locked or no match
+function credsForHost(host) {
+  if (!unlocked() || !host) return null;
+  const m = entries.find((e) => { const eh = hostOf(e.url); return eh && (eh === host || host.endsWith('.' + eh) || eh.endsWith('.' + host)); });
+  return m ? { username: m.username || '', password: m.password || '' } : null;
+}
 
 async function fill(view, entry) { armLock(); try { return await view.executeJavaScript(fillScript(entry.username, entry.password), true); } catch { return false; } }
 
@@ -366,5 +372,5 @@ export const Vault = {
     bodyEl.addEventListener('mousedown', armLock, true);
     return load();
   },
-  refreshPaneKey, fillPane, unlocked, togglePanel, offerSave, offerFill, hideFill
+  refreshPaneKey, fillPane, unlocked, togglePanel, offerSave, offerFill, hideFill, credsForHost
 };
