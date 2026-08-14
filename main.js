@@ -124,6 +124,7 @@ function createWindow() {
     webPreferences.contextIsolation = true;
     webPreferences.sandbox = true;
     webPreferences.webSecurity = true;
+    webPreferences.plugins = true;   // enable Chromium's built-in (pdfium) PDF viewer -- view PDFs inline, not download
     if (params) { delete params.nodeintegration; delete params.nodeintegrationinsubframes; delete params.webpreferences; delete params.disablewebsecurity; delete params.plugins; }
   });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
@@ -145,6 +146,7 @@ ipcMain.handle('settings:get', () => store.getSettings());
 ipcMain.handle('settings:set', (_e, patch) => store.setSettings(patch));
 ipcMain.handle('data:clear', (_e, kind) => store.clearData(kind));
 const dlPaths = new Set();   // full paths of files we've saved -- open/reveal is gated to these
+ipcMain.on('app:home', (e) => { e.returnValue = app.getPath('home'); });   // sync home dir for the sandboxed preload
 ipcMain.on('open-downloads', () => shell.openPath(app.getPath('downloads')));
 ipcMain.on('download:open', (_e, p) => { if (dlPaths.has(p)) shell.openPath(p); });
 ipcMain.on('download:reveal', (_e, p) => { if (dlPaths.has(p)) shell.showItemInFolder(p); });
@@ -188,6 +190,10 @@ ipcMain.on('http-auth-reply', (_e, { id, username, password }) => {
 });
 
 app.whenReady().then(() => {
+  // Present as vanilla Chrome: drop the "Splitser/x" and "Electron/x" UA tokens. Some sites (Google
+  // sign-in, banks) refuse or degrade for anything advertising Electron -- bad for a logged-in-apps browser.
+  app.userAgentFallback = app.userAgentFallback.replace(/ (Splitser|Electron)\/\S+/g, '');
+
   const ses = electronSession.fromPartition('persist:split');
 
   // ad/tracker blocking on the shared session (engine loads async; handler no-ops until ready)

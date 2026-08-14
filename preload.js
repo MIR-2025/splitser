@@ -2,6 +2,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('splitAPI', {
+  home: ipcRenderer.sendSync('app:home'),   // home dir for ~/path expansion (sync, sandbox-safe -- no os require)
   // main -> renderer events
   onOpenPane: (cb) => ipcRenderer.on('open-pane', (_e, url) => cb(url)),
   onShortcut: (cb) => ipcRenderer.on('shortcut', (_e, key) => cb(key)),

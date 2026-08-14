@@ -4,6 +4,7 @@
 import { Vault } from './vault.js';
 import { Theme } from './theme.js';
 const api = window.splitAPI;
+const HOME = (api && api.home) || '';
 const gridRoot = document.getElementById('grid');   // parent element; holds one .gridset per set
 const setbar = document.getElementById('setbar');
 const hoverEl = document.getElementById('hoverurl');
@@ -27,6 +28,9 @@ function normalize(s) {
   if (!s) return null;
   if (/^(javascript|data|blob|vbscript):/i.test(s)) return SETTINGS.search.replace('%s', encodeURIComponent(s));  // never navigate the bar to a script/data URL
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) return s;
+  if (/^~\//.test(s) && HOME) return 'file://' + encodeURI(HOME + s.slice(1));         // ~/path -> local file
+  if (/^\/(?!\/)/.test(s)) return 'file://' + encodeURI(s);                            // /abs/path -> local file
+  if (/^[a-zA-Z]:[\\/]/.test(s)) return 'file:///' + encodeURI(s.replace(/\\/g, '/'));  // Windows C:\path -> local file
   if (/^localhost(:\d+)?(\/|$)/.test(s)) return 'http://' + s;
   if (/^\d{1,3}(\.\d{1,3}){3}(:\d+)?(\/|$)/.test(s)) return 'http://' + s;
   if (/^[^\s]+\.[a-z]{2,}(:\d+)?([/?#]|$)/i.test(s)) return 'https://' + s;
@@ -210,6 +214,54 @@ function makePane(url, beforeEl = null, tabUrls = null) {
   return pane;
 }
 
+// Injected INTO a webview (via executeJavaScript) when it loads a local .md file: renders the
+// markdown readably and adds a Rendered/Raw toggle. Self-contained -- must not reference outer scope.
+function mdViewerInject() {
+  if (window.__mdRendered) return;
+  const pre = document.querySelector('body > pre');
+  const raw = pre ? pre.textContent : (document.body ? document.body.innerText : '');
+  if (raw == null || !document.body) return;
+  window.__mdRendered = true;
+  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const inl = (s) => s
+    .replace(/`([^`]+)`/g, (_, c) => '<code>' + c + '</code>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/(^|[^*])\*([^*\s][^*]*)\*/g, '$1<em>$2</em>')
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>');
+  const md = (src) => {
+    const L = src.split('\n'); const o = []; let i = 0;
+    while (i < L.length) {
+      const l = L[i];
+      if (/^```/.test(l)) { const c = []; i++; while (i < L.length && !/^```/.test(L[i])) { c.push(L[i]); i++; } i++; o.push('<pre class="cb"><code>' + esc(c.join('\n')) + '</code></pre>'); continue; }
+      const h = l.match(/^(#{1,6})\s+(.*)/); if (h) { o.push('<h' + h[1].length + '>' + inl(esc(h[2])) + '</h' + h[1].length + '>'); i++; continue; }
+      if (/^(-{3,}|\*{3,}|_{3,})\s*$/.test(l)) { o.push('<hr>'); i++; continue; }
+      if (/^>\s?/.test(l)) { const b = []; while (i < L.length && /^>\s?/.test(L[i])) { b.push(L[i].replace(/^>\s?/, '')); i++; } o.push('<blockquote>' + inl(esc(b.join(' '))) + '</blockquote>'); continue; }
+      if (/^\s*([-*+]|\d+\.)\s+/.test(l)) { const ord = /^\s*\d+\./.test(l); const it = []; while (i < L.length && /^\s*([-*+]|\d+\.)\s+/.test(L[i])) { it.push('<li>' + inl(esc(L[i].replace(/^\s*([-*+]|\d+\.)\s+/, ''))) + '</li>'); i++; } o.push('<' + (ord ? 'ol' : 'ul') + '>' + it.join('') + '</' + (ord ? 'ol' : 'ul') + '>'); continue; }
+      if (/^\s*$/.test(l)) { i++; continue; }
+      const p = []; while (i < L.length && !/^\s*$/.test(L[i]) && !/^(#{1,6}\s|```|>\s?|\s*([-*+]|\d+\.)\s)/.test(L[i])) { p.push(L[i]); i++; } o.push('<p>' + inl(esc(p.join(' '))) + '</p>');
+    }
+    return o.join('\n');
+  };
+  const css = ':root{color-scheme:dark}body{margin:0;background:#0e1418;color:#e7e3d6;font:15px/1.65 -apple-system,system-ui,Segoe UI,Roboto,sans-serif}' +
+    '#mdbar{position:sticky;top:0;display:flex;justify-content:flex-end;padding:8px 12px;background:#12181d;border-bottom:1px solid #26303a}' +
+    '#mdtoggle{background:#1a2129;color:#e7e3d6;border:1px solid #2d3a45;border-radius:6px;padding:5px 11px;font-size:12px;cursor:pointer}' +
+    '#mdtoggle:hover{border-color:#5fe08a}' +
+    '#mdview{max-width:820px;margin:0 auto;padding:28px 28px 60px}' +
+    '#mdview h1,#mdview h2,#mdview h3,#mdview h4{line-height:1.25;margin:1.4em 0 .5em}' +
+    '#mdview h1{font-size:2em;border-bottom:1px solid #26303a;padding-bottom:.3em}#mdview h2{font-size:1.5em;border-bottom:1px solid #26303a;padding-bottom:.3em}' +
+    '#mdview a{color:#5fe08a}#mdview code{background:#1a2129;padding:.15em .4em;border-radius:4px;font-size:.9em;font-family:ui-monospace,Menlo,Consolas,monospace}' +
+    '#mdview pre.cb{background:#0b1013;border:1px solid #26303a;border-radius:8px;padding:14px 16px;overflow:auto}#mdview pre.cb code{background:none;padding:0}' +
+    '#mdview blockquote{border-left:3px solid #5fe08a;margin:1em 0;padding:.2em 1em;color:#aab6c0}#mdview ul,#mdview ol{padding-left:1.6em}' +
+    '#mdview hr{border:0;border-top:1px solid #26303a;margin:1.6em 0}#mdview img{max-width:100%}' +
+    '#mdraw{max-width:820px;margin:0 auto;padding:24px 28px 60px;white-space:pre-wrap;word-wrap:break-word;color:#cfd8e0;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}';
+  document.documentElement.innerHTML = '<head><meta charset="utf-8"><style>' + css + '</style></head><body>' +
+    '<div id="mdbar"><button id="mdtoggle">View raw</button></div>' +
+    '<article id="mdview">' + md(raw) + '</article>' +
+    '<pre id="mdraw" style="display:none">' + esc(raw) + '</pre></body>';
+  const tog = document.getElementById('mdtoggle'), v = document.getElementById('mdview'), r = document.getElementById('mdraw');
+  let rendered = true;
+  tog.onclick = () => { rendered = !rendered; v.style.display = rendered ? '' : 'none'; r.style.display = rendered ? 'none' : 'block'; tog.textContent = rendered ? 'View raw' : 'View rendered'; };
+}
 // one tab = one live <webview>; background tabs stay alive (display:none, not destroyed)
 function addTab(pane, url) {
   const view = document.createElement('webview');
@@ -240,7 +292,8 @@ function addTab(pane, url) {
   view.addEventListener('did-navigate-in-page', () => { tab.url = view.getURL(); if (active()) pane.syncAddr(); });
   view.addEventListener('dom-ready', () => { try { tab.wcId = view.getWebContentsId(); } catch (e) { /* not attached yet */ } if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); pane.refreshShield(); } });
   view.addEventListener('did-start-loading', () => { tab.loading = true; tabEl.classList.add('loading'); if (active()) pane.spin.hidden = false; });
-  view.addEventListener('did-stop-loading', () => { tab.loading = false; tabEl.classList.remove('loading'); if (active()) { pane.spin.hidden = true; pane.syncAddr(); } const u = view.getURL(); if (/^https?:/.test(u)) api.historyAdd({ url: u, title: tab.title }); });
+  view.addEventListener('did-stop-loading', () => { tab.loading = false; tabEl.classList.remove('loading'); if (active()) { pane.spin.hidden = true; pane.syncAddr(); } const u = view.getURL(); if (/^https?:/.test(u)) api.historyAdd({ url: u, title: tab.title });
+    if (/^file:\/\/.*\.(md|markdown)(\?|#|$)/i.test(u)) view.executeJavaScript('(' + mdViewerInject.toString() + ')()').catch(() => {}); });   // render local markdown
   view.addEventListener('page-title-updated', (e) => { tab.title = e.title || tab.url; ttitle.textContent = tab.title; tabEl.title = tab.title; if (active()) updateTitle(); });
   view.addEventListener('page-favicon-updated', (e) => { const f = (e.favicons || [])[0]; if (f) tab.realFavicon = f; syncFav(); });
   view.addEventListener('update-target-url', (e) => { hoverEl.textContent = e.url || ''; });
@@ -561,6 +614,12 @@ function setName(s, i) {   // a workspace's label: user-set name, else its first
   const h = p && p.activeTab ? favHost(p.activeTab.url || (p.activeTab.view && p.activeTab.view.getURL())) : '';
   return h || ('Set ' + (i + 1));
 }
+// the split-pane brand mark, inlined so it needs no file/CSP round-trip; sits where the label was
+const LOGO_SVG = '<svg class="setbar-logo" viewBox="0 0 24 24" width="20" height="20" role="img" aria-label="Splitser"><title>Splitser</title>' +
+  '<rect width="24" height="24" rx="5.4" fill="#0e1418"/>' +
+  '<rect x="4.2" y="4.2" width="6.6" height="15.6" rx="1.2" fill="#5fe08a"/>' +
+  '<rect x="11.7" y="4.2" width="8.1" height="7.3" rx="1.2" fill="#5fe08a"/>' +
+  '<rect x="11.7" y="12.5" width="8.1" height="7.3" rx="1.2" fill="#5fe08a"/></svg>';
 function renderSetbar() {   // the "Workspaces" bar: named pills that wrap across rows (like the Split Screen ext)
   const pills = sets.map((s, i) => {
     const fav = s.panes.map((p) => p.activeTab && p.activeTab.favicon).find(Boolean);
@@ -572,7 +631,7 @@ function renderSetbar() {   // the "Workspaces" bar: named pills that wrap acros
       (sets.length > 1 ? '<button class="setclose" data-i="' + i + '" title="Close workspace">&#215;</button>' : '') +
       '</span>';
   }).join('');
-  setbar.innerHTML = '<span class="setbar-label">Workspaces</span>' + pills + '<button class="setadd" title="New workspace (Ctrl+T)">+ New grid</button>';
+  setbar.innerHTML = LOGO_SVG + pills + '<button class="setadd" title="New workspace (Ctrl+T)">+ Workspace</button>';
 }
 function renameSet(s, pill) {
   const nameEl = pill.querySelector('.setname'); if (!nameEl) return;
