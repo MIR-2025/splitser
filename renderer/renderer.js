@@ -37,6 +37,49 @@ function markActive() {   // visual focus indicator: accent the pane that has fo
   const p = active(); if (p && p.el) p.el.classList.add('active');
 }
 
+// ---- per-host custom favicons: give an icon to sites that have none (localhost, dev servers) ----
+let favOverrides = {};
+try { favOverrides = JSON.parse(localStorage.getItem('favicons') || '{}') || {}; } catch (e) { favOverrides = {}; }
+function favHost(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } }
+function favOv(host) { return host ? favOverrides[host] : null; }
+function saveFavs() { try { localStorage.setItem('favicons', JSON.stringify(favOverrides)); } catch (e) { /* ignore */ } }
+const FAV_EMOJI = ['🖥️', '💻', '🧪', '⚙️', '🚀', '📦', '🔧', '🗄️', '🐘', '🐍', '⚡', '🌐', '📊', '🔒', '🎯', '🧩'];
+const FAV_COLORS = ['#5fe08a', '#5b9dff', '#c084fc', '#fb7185', '#fbbf24', '#2dd4bf', '#f97316', '#94a3b8'];
+function makeFav(spec, host) {   // render an emoji or a colour+initial to a 32px favicon data URL
+  const c = document.createElement('canvas'); c.width = c.height = 32; const g = c.getContext('2d');
+  if (spec.emoji) { g.font = '24px system-ui,"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji"'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(spec.emoji, 16, 18); }
+  else { g.fillStyle = spec.color; if (g.roundRect) { g.beginPath(); g.roundRect(1, 1, 30, 30, 7); g.fill(); } else g.fillRect(1, 1, 30, 30); g.fillStyle = '#0b1013'; g.font = 'bold 18px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText((host || '?').charAt(0).toUpperCase(), 16, 17); }
+  return c.toDataURL('image/png');
+}
+function setPaneFav(pane, favicon) {
+  if (favicon) { pane.fav.src = favicon; pane.fav.classList.remove('fav-empty'); }
+  else { pane.fav.removeAttribute('src'); pane.fav.classList.add('fav-empty'); }
+  pane.fav.hidden = false;   // always shown -> always a click target to set an icon
+}
+function resyncHostFavicons(host) {
+  for (const s of sets) for (const p of s.panes) for (const t of p.tabs) { if (favHost(t.url || (t.view && t.view.getURL())) === host && t.syncFav) t.syncFav(); }
+  renderSetbar();
+}
+function closeFavPicker() { document.querySelectorAll('.fav-picker').forEach((p) => p.remove()); }
+function openFavPicker(pane) {
+  closeFavPicker();
+  const host = favHost(pane.view ? pane.view.getURL() : ''); if (!host) return;
+  const pop = document.createElement('div'); pop.className = 'fav-picker';
+  pop.innerHTML = '<div class="fp-h">Icon for <b>' + esc(host) + '</b></div>' +
+    '<div class="fp-grid">' + FAV_EMOJI.map((e) => '<button class="fp-e" data-emoji="' + e + '">' + e + '</button>').join('') + '</div>' +
+    '<div class="fp-grid">' + FAV_COLORS.map((c) => '<button class="fp-c" data-color="' + c + '" style="background:' + c + '"></button>').join('') + '</div>' +
+    '<button class="fp-auto">Use the site’s own icon</button>';
+  pane.el.appendChild(pop);
+  const br = pane.fav.getBoundingClientRect(), pr = pane.el.getBoundingClientRect();
+  pop.style.left = Math.max(6, Math.min(br.left - pr.left - 8, pane.el.clientWidth - pop.offsetWidth - 6)) + 'px';
+  pop.style.top = (br.bottom - pr.top + 6) + 'px';
+  const pick = (spec) => { if (spec) favOverrides[host] = makeFav(spec, host); else delete favOverrides[host]; saveFavs(); resyncHostFavicons(host); closeFavPicker(); };
+  pop.querySelectorAll('.fp-e').forEach((b) => { b.onclick = () => pick({ emoji: b.dataset.emoji }); });
+  pop.querySelectorAll('.fp-c').forEach((b) => { b.onclick = () => pick({ color: b.dataset.color }); });
+  pop.querySelector('.fp-auto').onclick = () => pick(null);
+  setTimeout(() => document.addEventListener('mousedown', function h(e) { if (!pop.contains(e.target) && e.target !== pane.fav) { closeFavPicker(); document.removeEventListener('mousedown', h); } }), 0);
+}
+
 const BAR = `
   <div class="bar">
     <button class="nav back" title="Back">&#8249;</button>
@@ -143,6 +186,7 @@ function makePane(url, beforeEl = null, tabUrls = null) {
   el.querySelector('.close').addEventListener('click', () => closePane(pane));
   star.addEventListener('click', pane.toggleBookmark);
   keyBtn.addEventListener('click', () => Vault.fillPane(pane));
+  fav.addEventListener('click', (e) => { e.stopPropagation(); openFavPicker(pane); });   // set a custom icon (localhost etc.)
   shieldBtn.addEventListener('click', (e) => { e.stopPropagation(); pane.openShields(); });
   muteBtn.addEventListener('click', pane.toggleMute);
   findInput.addEventListener('input', () => { if (!pane.view) return; if (findInput.value) pane.view.findInPage(findInput.value); else { pane.view.stopFindInPage('clearSelection'); findCount.textContent = ''; } });
@@ -179,18 +223,25 @@ function addTab(pane, url) {
   tabEl.innerHTML = '<img class="tabfav" alt="" hidden /><span class="tabtitle">New tab</span><button class="tabclose" title="Close tab">&#215;</button>';
   pane.tabstrip.insertBefore(tabEl, pane.tabstrip.querySelector('.newtab'));
 
-  const tab = { view, tabEl, title: 'New tab', favicon: '', url: url || '', zoom: 1, muted: false, loading: false, audio: false };
+  const tab = { view, tabEl, title: 'New tab', favicon: '', realFavicon: '', url: url || '', zoom: 1, muted: false, loading: false, audio: false };
   const tfav = tabEl.querySelector('.tabfav');
   const ttitle = tabEl.querySelector('.tabtitle');
   const active = () => pane.activeTab === tab;
+  const syncFav = () => {   // a per-host custom icon (favOverrides) wins; else the page's own; else none
+    const ov = favOv(favHost(tab.url || view.getURL()));
+    tab.favicon = ov || tab.realFavicon || '';
+    if (tab.favicon) { tfav.src = tab.favicon; tfav.hidden = false; } else { tfav.removeAttribute('src'); tfav.hidden = true; }
+    if (active()) { setPaneFav(pane, tab.favicon); renderSetbar(); }
+  };
+  tab.syncFav = syncFav;
 
-  view.addEventListener('did-navigate', () => { tab.url = view.getURL(); if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); } saveSession(); });
+  view.addEventListener('did-navigate', () => { tab.url = view.getURL(); tab.realFavicon = ''; syncFav(); if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); } saveSession(); });
   view.addEventListener('did-navigate-in-page', () => { tab.url = view.getURL(); if (active()) pane.syncAddr(); });
   view.addEventListener('dom-ready', () => { try { tab.wcId = view.getWebContentsId(); } catch (e) { /* not attached yet */ } if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); pane.refreshShield(); } });
   view.addEventListener('did-start-loading', () => { tab.loading = true; tabEl.classList.add('loading'); if (active()) pane.spin.hidden = false; });
   view.addEventListener('did-stop-loading', () => { tab.loading = false; tabEl.classList.remove('loading'); if (active()) { pane.spin.hidden = true; pane.syncAddr(); } const u = view.getURL(); if (/^https?:/.test(u)) api.historyAdd({ url: u, title: tab.title }); });
   view.addEventListener('page-title-updated', (e) => { tab.title = e.title || tab.url; ttitle.textContent = tab.title; tabEl.title = tab.title; if (active()) updateTitle(); });
-  view.addEventListener('page-favicon-updated', (e) => { const f = (e.favicons || [])[0]; if (f) { tab.favicon = f; tfav.src = f; tfav.hidden = false; if (active()) { pane.fav.src = f; pane.fav.hidden = false; renderSetbar(); } } });
+  view.addEventListener('page-favicon-updated', (e) => { const f = (e.favicons || [])[0]; if (f) tab.realFavicon = f; syncFav(); });
   view.addEventListener('update-target-url', (e) => { hoverEl.textContent = e.url || ''; });
   view.addEventListener('found-in-page', (e) => { if (active()) { const r = e.result; pane.findCount.textContent = r.matches ? r.activeMatchOrdinal + '/' + r.matches : 'no matches'; } });
   view.addEventListener('media-started-playing', () => { tab.audio = true; if (active()) pane.muteBtn.hidden = false; });
@@ -202,6 +253,7 @@ function addTab(pane, url) {
   });
   tfav.addEventListener('error', () => { tfav.hidden = true; });
 
+  syncFav();   // apply a custom icon immediately (e.g. a restored localhost tab)
   pane.tabs.push(tab);
   pane.el.classList.toggle('multitab', pane.tabs.length > 1);
   switchTab(pane, tab);
@@ -213,7 +265,7 @@ function switchTab(pane, tab) {
   pane.tabs.forEach((t) => { t.view.style.display = (t === tab) ? '' : 'none'; t.tabEl.classList.toggle('on', t === tab); });
   pane.activeTab = tab;
   pane.addr.value = (tab.url && tab.url !== 'about:blank') ? tab.url : '';
-  pane.fav.hidden = !tab.favicon; if (tab.favicon) pane.fav.src = tab.favicon;
+  setPaneFav(pane, tab.favicon);
   pane.spin.hidden = !tab.loading;
   pane.muteBtn.hidden = !(tab.muted || tab.audio); pane.muteBtn.innerHTML = tab.muted ? '&#128263;' : '&#128266;';
   pane.findbar.hidden = true; pane.findCount.textContent = '';
