@@ -2,6 +2,7 @@
 // history-backed address autocomplete, bookmarks, session restore, downloads, settings,
 // and the vault (local password manager + autofill).
 import { Vault } from './vault.js';
+import { Theme } from './theme.js';
 const api = window.splitAPI;
 const gridRoot = document.getElementById('grid');   // parent element; holds one .gridset per set
 const setbar = document.getElementById('setbar');
@@ -529,6 +530,7 @@ if (saved && saved.v === 2 && Array.isArray(saved.sets) && saved.sets.length) {
   switchSet(sets[0]);
 }
 Vault.init({ api, getPanes: () => panes, getActive: () => active() });
+Theme.init();
 
 // layout picker (status bar) applies to the current set
 document.getElementById('layout-picker').addEventListener('click', (e) => {

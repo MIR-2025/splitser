@@ -22,6 +22,7 @@
       <button class="sbtn" id="btn-vault" title="Vault (passwords)">&#128273;</button>
       <button class="sbtn" id="btn-bookmarks" title="Bookmarks">&#9733;</button>
       <button class="sbtn" id="btn-downloads" title="Downloads" hidden>&#8595;<span class="dl-badge" id="dl-badge"></span></button>
+      <button class="sbtn" id="btn-theme" title="Theme &amp; backdrop">&#127912;</button>
       <button class="sbtn" id="btn-settings" title="Settings">&#9881;</button>
       <span class="brand" id="paneinfo">Splitser</span>
     </div>
@@ -53,6 +54,11 @@
   <div class="panel panel-vault" id="panel-vault" hidden>
     <div class="panel-h">Vault <span class="panel-sub">local · encrypted</span></div>
     <div class="panel-body" id="vault-body"></div>
+  </div>
+
+  <div class="panel panel-theme" id="panel-theme" hidden>
+    <div class="panel-h">Theme <span class="panel-sub">colors &amp; backdrop</span></div>
+    <div class="panel-body" id="theme-body"></div>
   </div>
 
   <script type="module" src="renderer.js"></script>

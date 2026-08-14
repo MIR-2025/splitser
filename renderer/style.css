@@ -2,6 +2,7 @@
   --bg:#0e1418; --chrome:#12181d; --line:#232c33; --line-2:#2c3740;
   --text:#e7e3d6; --muted:#8b968c; --accent:#5fe08a;
   --field:#0b1013; --field-focus:#0e161b;
+  --surface:#1b232a; --surface-2:#161d23;   /* elevated surfaces (active/hover tab, buttons) */
 }
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
@@ -315,3 +316,44 @@ webview{ display:flex }
 .vf-main{ display:flex; flex-direction:column; min-width:0 }
 .vf-main b{ font-size:13px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .vf-sub{ font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+
+/* ================= theming: backdrop banner + theme panel ================= */
+/* One fixed strip painted behind the top chrome (set-bar + every pane's tab strip
+   + toolbar); those bars go translucent so a single image spans them. A dark scrim
+   (the Overlay slider, --dim) keeps text legible over any picture. */
+body.has-bgimg::before{
+  content:''; position:fixed; top:0; left:0; right:0; height:var(--banner-h,102px);
+  background: linear-gradient(rgba(0,0,0,var(--dim,.35)), rgba(0,0,0,var(--dim,.35))), var(--bg-img,none);
+  background-size:100% var(--banner-h,102px); background-position:top center; background-repeat:no-repeat;
+  z-index:0; pointer-events:none;
+}
+body.has-bgimg .setbar{ background:transparent; position:relative; z-index:2; }
+body.has-bgimg .grid{ position:relative; z-index:1; }
+body.has-bgimg .pane{ background:transparent; }
+body.has-bgimg .tabstrip{ background:transparent; }
+body.has-bgimg .bar{ background:transparent; }
+body.has-bgimg .addr{ background:rgba(0,0,0,.30); }
+body.has-bgimg .addr:focus{ background:rgba(0,0,0,.58); }
+body.has-bgimg .tab.on{ background:rgba(0,0,0,.34); }
+
+/* theme panel */
+.th-row{ display:flex; align-items:center; gap:10px; margin-bottom:11px; }
+.th-lbl{ flex:0 0 56px; font-size:12px; color:var(--muted); }
+.th-wrap{ display:flex; flex-wrap:wrap; gap:6px; flex:1 1 auto; }
+.th-chip{ width:36px; height:22px; border-radius:6px; border:1px solid var(--line-2); cursor:pointer;
+  display:inline-flex; overflow:hidden; padding:0; }
+.th-chip i{ flex:1 1 auto; display:block; }
+.th-chip:hover{ border-color:var(--accent); }
+.th-ban{ width:46px; height:26px; border-radius:6px; border:1px solid var(--line-2); cursor:pointer;
+  background-size:cover; background-position:center; color:var(--muted); padding:0;
+  display:inline-flex; align-items:center; justify-content:center; font-size:14px; }
+.th-ban:hover{ border-color:var(--accent); color:var(--text); }
+.th-ban.on{ border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+.th-none, .th-file{ background:var(--field); }
+.th-range{ flex:1 1 auto; accent-color:var(--accent); }
+.th-dimval{ flex:0 0 34px; font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums; }
+.th-color{ width:36px; height:24px; padding:0; border:1px solid var(--line-2); border-radius:6px; background:none; cursor:pointer; }
+.th-btn{ margin-left:auto; padding:4px 12px; border:1px solid var(--line-2); border-radius:6px;
+  background:var(--field); color:var(--text); cursor:pointer; font-size:12px; }
+.th-btn:hover{ border-color:var(--accent); }
+.th-hide{ display:none; }
