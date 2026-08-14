@@ -30,7 +30,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24          # current Active LTS (Node 20 went EOL Apr 2026)
       - name: Pin npm (avoid the broken npm@12 line)
         run: npm i -g npm@11
       - run: npm ci
