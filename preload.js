@@ -6,6 +6,12 @@ contextBridge.exposeInMainWorld('splitAPI', {
   onOpenPane: (cb) => ipcRenderer.on('open-pane', (_e, url) => cb(url)),
   onShortcut: (cb) => ipcRenderer.on('shortcut', (_e, key) => cb(key)),
   onDownload: (cb) => ipcRenderer.on('download-update', (_e, d) => cb(d)),
+  onShields: (cb) => ipcRenderer.on('shields-update', (_e, d) => cb(d)),
+
+  // shields (ad/tracker blocking)
+  shieldsGet: (wcId) => ipcRenderer.invoke('shields:get', wcId),
+  shieldsToggleSite: (host) => ipcRenderer.invoke('shields:toggleSite', host),
+  shieldsToggleAll: () => ipcRenderer.invoke('shields:toggleAll'),
 
   // history
   historyAdd: (entry) => ipcRenderer.send('history:add', entry),

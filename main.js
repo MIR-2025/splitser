@@ -1,14 +1,53 @@
 // Splitser (splitser.org) — main process. Hosts the renderer UI with <webview> enabled
 // (real Chromium views, no header-strip), owns the data layer (history/bookmarks/session/
 // settings via store.js), and handles downloads + permission prompts on the shared session.
-import { app, BrowserWindow, ipcMain, session as electronSession, dialog, shell, clipboard } from 'electron';
+import { app, BrowserWindow, ipcMain, session as electronSession, dialog, shell, clipboard, webContents } from 'electron';
 import path from 'node:path';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { ElectronBlocker, fromElectronDetails } from '@ghostery/adblocker-electron';
 import * as store from './store.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 app.setName('Splitser');
 let win;
+
+// ---- shields: ad/tracker blocking, on by default, with a per-site allowlist ----
+let blocker = null;                              // Ghostery engine (EasyList-class), loaded async
+const _sh = store.getShields();
+const allow = new Set(_sh.allow || []);          // hosts with shields DOWN
+let shieldsOn = _sh.on !== false;                // global default
+const blocked = new Map();                       // webContentsId -> count on the current page
+const pushT = new Map();
+function hostOf(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } }
+function wcHost(id) { const wc = id ? webContents.fromId(id) : null; return wc && !wc.isDestroyed() ? hostOf(wc.getURL()) : ''; }
+function persistShields() { store.setShields({ on: shieldsOn, allow: [...allow] }); }
+function pushShields(id) {                        // throttle live count updates to the renderer
+  if (pushT.has(id)) return;
+  pushT.set(id, setTimeout(() => {
+    pushT.delete(id);
+    const host = wcHost(id);
+    win && win.webContents.send('shields-update', { wcId: id, count: blocked.get(id) || 0, host, siteOn: host ? !allow.has(host) : true, globalOn: shieldsOn });
+  }, 300));
+}
+function onBeforeRequest(details, cb) {
+  if (!shieldsOn || !blocker) return cb({});
+  const id = details.webContentsId, host = wcHost(id);
+  if (host && allow.has(host)) return cb({});     // this site's shields are down
+  const { match, redirect } = blocker.match(fromElectronDetails(details));
+  if (redirect) return cb({ redirectURL: redirect.dataUrl });
+  if (match) { blocked.set(id, (blocked.get(id) || 0) + 1); pushShields(id); return cb({ cancel: true }); }
+  cb({});
+}
+async function initAdblock() {
+  try {
+    blocker = await ElectronBlocker.fromPrebuiltAdsAndTracking(fetch, {
+      path: path.join(app.getPath('userData'), 'adblocker-engine.bin'),
+      read: (p) => fs.promises.readFile(p),
+      write: (p, d) => fs.promises.writeFile(p, d)
+    });
+  } catch (e) { console.error('[shields] could not load filter lists:', e && e.message); }
+}
 
 // Shell shortcuts intercepted on every webContents (host + each webview) so they fire even
 // while a page has focus (webview key events don't bubble to the host).
@@ -24,11 +63,13 @@ function wireShortcuts(contents) {
 function createWindow() {
   win = new BrowserWindow({
     width: 1500, height: 940, backgroundColor: '#0e1418', title: 'Splitser',
+    autoHideMenuBar: true,          // the default File/Edit/View menu is dead weight for a browser; hide it (Alt reveals)
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       webviewTag: true, contextIsolation: true, nodeIntegration: false, sandbox: true
     }
   });
+  win.setMenuBarVisibility(false);
   // give every pane's <webview> a tiny preload that reports login submissions to the host so the
   // vault can offer to save them (set from main, so a page can't spoof or replace it)
   win.webContents.on('will-attach-webview', (_e, webPreferences) => {
@@ -60,8 +101,25 @@ ipcMain.on('clipboard:clear-soon', (_e, text) => {
   setTimeout(() => { if (clipboard.readText() === text) clipboard.writeText(''); }, 25000);
 });
 
+// shields
+ipcMain.handle('shields:get', (_e, wcId) => {
+  const host = wcHost(wcId);
+  return { count: blocked.get(wcId) || 0, host, siteOn: host ? !allow.has(host) : true, globalOn: shieldsOn };
+});
+ipcMain.handle('shields:toggleSite', (_e, host) => {   // returns new on-state for this site
+  if (!host) return true;
+  if (allow.has(host)) allow.delete(host); else allow.add(host);
+  persistShields();
+  return !allow.has(host);
+});
+ipcMain.handle('shields:toggleAll', () => { shieldsOn = !shieldsOn; persistShields(); return shieldsOn; });
+
 app.whenReady().then(() => {
   const ses = electronSession.fromPartition('persist:split');
+
+  // ad/tracker blocking on the shared session (engine loads async; handler no-ops until ready)
+  ses.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, onBeforeRequest);
+  initAdblock();
 
   // downloads: save to the Downloads folder, stream progress to the renderer
   let dlId = 0;
@@ -95,6 +153,9 @@ app.whenReady().then(() => {
     contents.setWindowOpenHandler(({ url }) => {
       if (win && /^(https?:|about:)/.test(url)) win.webContents.send('open-pane', url);
       return { action: 'deny' };
+    });
+    contents.on('did-start-navigation', (_ev, _u, isInPlace, isMainFrame) => {   // new page -> reset its block count
+      if (isMainFrame && !isInPlace) { blocked.set(contents.id, 0); pushShields(contents.id); }
     });
     wireShortcuts(contents);
   });

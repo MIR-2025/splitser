@@ -40,6 +40,7 @@ const BAR = `
     <img class="fav" alt="" hidden />
     <input class="addr" type="text" spellcheck="false" autocomplete="off" placeholder="Search or enter address" />
     <span class="spin" hidden></span>
+    <button class="nav shield" title="Shields: ad &amp; tracker blocking">&#128737;<span class="shield-n"></span></button>
     <button class="nav key" title="Fill login from vault" hidden>&#128273;</button>
     <button class="nav star" title="Bookmark (Ctrl+D)">&#9734;</button>
     <button class="nav mute" title="Mute pane (Ctrl+M)" hidden>&#128266;</button>
@@ -70,6 +71,7 @@ function makePane(url, beforeEl = null, tabUrls = null) {
   const star = el.querySelector('.star');
   const keyBtn = el.querySelector('.key');
   const muteBtn = el.querySelector('.mute');
+  const shieldBtn = el.querySelector('.shield');
   const suggest = el.querySelector('.suggest');
   const findbar = el.querySelector('.findbar');
   const findInput = el.querySelector('.find-input');
@@ -77,7 +79,7 @@ function makePane(url, beforeEl = null, tabUrls = null) {
   const tabstrip = el.querySelector('.tabstrip');
 
   const pane = {
-    el, addr, star, keyBtn, tabstrip, fav, spin, muteBtn, findbar, findInput, findCount,
+    el, addr, star, keyBtn, shieldBtn, tabstrip, fav, spin, muteBtn, findbar, findInput, findCount,
     viewsBox: el.querySelector('.views'), tabs: [], activeTab: null, sugIdx: -1, sugs: [],
     get view() { return this.activeTab ? this.activeTab.view : null; },
     get title() { return this.activeTab ? this.activeTab.title : ''; },
@@ -101,6 +103,20 @@ function makePane(url, beforeEl = null, tabUrls = null) {
   pane.closeFind = () => { findbar.hidden = true; findCount.textContent = ''; if (pane.view) { pane.view.stopFindInPage('clearSelection'); pane.view.focus(); } };
   pane.setZoom = (z) => { const t = pane.activeTab; if (!t) return; t.zoom = Math.max(0.4, Math.min(3, z)); pane.view.setZoomFactor(t.zoom); };
   pane.toggleMute = () => { const t = pane.activeTab; if (!t) return; t.muted = !t.muted; pane.view.setAudioMuted(t.muted); muteBtn.hidden = false; muteBtn.innerHTML = t.muted ? '&#128263;' : '&#128266;'; };
+  pane.updateShield = (info) => {
+    pane.shieldInfo = info;
+    const on = info.globalOn && info.siteOn;
+    shieldBtn.classList.toggle('down', !on);
+    shieldBtn.querySelector('.shield-n').textContent = (on && info.count) ? (info.count > 99 ? '99+' : String(info.count)) : '';
+    shieldBtn.title = (on ? 'Shields on — ' + (info.count || 0) + ' blocked' : 'Shields off') + (info.host ? ' · ' + info.host : '');
+    if (shieldsPopPane === pane) renderShieldsPop(pane);
+  };
+  pane.refreshShield = async () => {
+    const t = pane.activeTab;
+    if (!t || !t.wcId) return pane.updateShield({ globalOn: true, siteOn: true, count: 0, host: '' });
+    pane.updateShield(await api.shieldsGet(t.wcId));
+  };
+  pane.openShields = () => { closeShieldsPop(); if (pane.shieldInfo === undefined) pane.refreshShield(); renderShieldsPop(pane); };
 
   // ---- toolbar handlers (all operate on the ACTIVE tab via pane.view) ----
   let sugTimer;
@@ -122,6 +138,7 @@ function makePane(url, beforeEl = null, tabUrls = null) {
   el.querySelector('.close').addEventListener('click', () => closePane(pane));
   star.addEventListener('click', pane.toggleBookmark);
   keyBtn.addEventListener('click', () => Vault.fillPane(pane));
+  shieldBtn.addEventListener('click', (e) => { e.stopPropagation(); pane.openShields(); });
   muteBtn.addEventListener('click', pane.toggleMute);
   findInput.addEventListener('input', () => { if (!pane.view) return; if (findInput.value) pane.view.findInPage(findInput.value); else { pane.view.stopFindInPage('clearSelection'); findCount.textContent = ''; } });
   findInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); if (findInput.value && pane.view) pane.view.findInPage(findInput.value, { findNext: true, forward: !e.shiftKey }); } else if (e.key === 'Escape') { e.preventDefault(); pane.closeFind(); } });
@@ -164,7 +181,7 @@ function addTab(pane, url) {
 
   view.addEventListener('did-navigate', () => { tab.url = view.getURL(); if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); } saveSession(); });
   view.addEventListener('did-navigate-in-page', () => { tab.url = view.getURL(); if (active()) pane.syncAddr(); });
-  view.addEventListener('dom-ready', () => { if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); } });
+  view.addEventListener('dom-ready', () => { try { tab.wcId = view.getWebContentsId(); } catch (e) { /* not attached yet */ } if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); pane.refreshShield(); } });
   view.addEventListener('did-start-loading', () => { tab.loading = true; tabEl.classList.add('loading'); if (active()) pane.spin.hidden = false; });
   view.addEventListener('did-stop-loading', () => { tab.loading = false; tabEl.classList.remove('loading'); if (active()) { pane.spin.hidden = true; pane.syncAddr(); } const u = view.getURL(); if (/^https?:/.test(u)) api.historyAdd({ url: u, title: tab.title }); });
   view.addEventListener('page-title-updated', (e) => { tab.title = e.title || tab.url; ttitle.textContent = tab.title; tabEl.title = tab.title; if (active()) updateTitle(); });
@@ -194,7 +211,7 @@ function switchTab(pane, tab) {
   pane.spin.hidden = !tab.loading;
   pane.muteBtn.hidden = !(tab.muted || tab.audio); pane.muteBtn.innerHTML = tab.muted ? '&#128263;' : '&#128266;';
   pane.findbar.hidden = true; pane.findCount.textContent = '';
-  pane.refreshStar(); Vault.refreshPaneKey(pane); updateTitle();
+  pane.refreshStar(); Vault.refreshPaneKey(pane); pane.refreshShield(); updateTitle();
 }
 
 function closeTab(pane, tab) {
@@ -245,6 +262,29 @@ function rebuildGutters() {
     }
   });
   updateInfo();
+}
+
+// ---- shields popover (per-site ad/tracker blocking) ----
+let shieldsPopPane = null;
+function closeShieldsPop() { document.querySelectorAll('.shields-pop').forEach((p) => p.remove()); shieldsPopPane = null; }
+function renderShieldsPop(pane) {
+  document.querySelectorAll('.shields-pop').forEach((p) => p.remove());
+  shieldsPopPane = pane;
+  const info = pane.shieldInfo || { globalOn: true, siteOn: true, count: 0, host: '' };
+  const pop = document.createElement('div');
+  pop.className = 'shields-pop';
+  pop.innerHTML =
+    '<div class="sp-h"><span class="sp-ic">&#128737;</span><b>Shields</b><span class="sp-host">' + esc(info.host || 'this page') + '</span></div>' +
+    '<div class="sp-count"><b>' + (info.count || 0) + '</b> ads &amp; trackers blocked here</div>' +
+    '<label class="sp-row"><span>Shields for this site</span><input type="checkbox" class="sp-site"' + (info.siteOn ? ' checked' : '') + (info.globalOn ? '' : ' disabled') + ' /></label>' +
+    '<label class="sp-row"><span>Block on all sites</span><input type="checkbox" class="sp-all"' + (info.globalOn ? ' checked' : '') + ' /></label>';
+  pane.el.appendChild(pop);
+  const br = pane.shieldBtn.getBoundingClientRect(), pr = pane.el.getBoundingClientRect();
+  pop.style.left = Math.max(6, Math.min(br.left - pr.left - 40, pane.el.clientWidth - pop.offsetWidth - 6)) + 'px';
+  pop.style.top = (br.bottom - pr.top + 4) + 'px';
+  pop.querySelector('.sp-site').onchange = async () => { await api.shieldsToggleSite(info.host); if (pane.view) pane.view.reload(); setTimeout(() => pane.refreshShield(), 400); };
+  pop.querySelector('.sp-all').onchange = async () => { await api.shieldsToggleAll(); if (pane.view) pane.view.reload(); setTimeout(() => pane.refreshShield(), 400); };
+  setTimeout(() => document.addEventListener('mousedown', function h(e) { if (!pop.contains(e.target) && e.target !== pane.shieldBtn) { closeShieldsPop(); document.removeEventListener('mousedown', h); } }), 0);
 }
 function startDrag(e) {
   e.preventDefault();
@@ -453,6 +493,8 @@ function handleShortcut(k) {
 }
 api.onShortcut(handleShortcut);
 api.onOpenPane((url) => { const p = makePane(url, active() ? active().el.nextElementSibling : null); rebuildGutters(); saveSession(); activePane = p; });
+// live shield counts: route to whichever pane's ACTIVE tab this webContents is
+api.onShields((d) => { for (const s of sets) for (const p of s.panes) { if (p.activeTab && p.activeTab.wcId === d.wcId) { p.updateShield(d); return; } } });
 
 // ---- status-bar panels: bookmarks / downloads / settings ----
 const panelBM = document.getElementById('panel-bookmarks');

@@ -357,3 +357,20 @@ body.has-bgimg .tab.on{ background:rgba(0,0,0,.34); }
   background:var(--field); color:var(--text); cursor:pointer; font-size:12px; }
 .th-btn:hover{ border-color:var(--accent); }
 .th-hide{ display:none; }
+
+/* ================= shields: ad/tracker blocking ================= */
+.nav.shield{ position:relative; font-size:14px; }
+.nav.shield .shield-n{ position:absolute; top:-1px; right:-2px; min-width:14px; height:14px; padding:0 3px;
+  border-radius:8px; background:var(--accent); color:#05130a; font-size:9px; font-weight:700; line-height:14px;
+  text-align:center; box-sizing:border-box; font-variant-numeric:tabular-nums; }
+.nav.shield .shield-n:empty{ display:none; }
+.nav.shield.down{ color:var(--muted); opacity:.55; }
+.shields-pop{ position:absolute; z-index:50; width:238px; background:var(--chrome); border:1px solid var(--line-2);
+  border-radius:10px; box-shadow:0 12px 30px rgba(0,0,0,.5); padding:10px 12px; font-size:12.5px; color:var(--text); }
+.sp-h{ display:flex; align-items:center; gap:7px; margin-bottom:6px; }
+.sp-h .sp-ic{ font-size:15px; }
+.sp-h .sp-host{ margin-left:auto; color:var(--muted); font-size:11px; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.sp-count{ color:var(--muted); margin-bottom:9px; }
+.sp-count b{ color:var(--accent); font-size:14px; }
+.sp-row{ display:flex; align-items:center; justify-content:space-between; gap:10px; padding:5px 0; cursor:pointer; }
+.sp-row input{ accent-color:var(--accent); cursor:pointer; }

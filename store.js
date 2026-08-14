@@ -71,6 +71,11 @@ export function setSettings(patch) { settings = { ...settings, ...patch }; saveN
 export function getVault() { return load('vault.enc', null); }
 export function setVault(blob) { saveNow('vault.enc', blob); }
 
+// ---- shields (ad/tracker blocking): { on: global default, allow: [hosts with shields down] } ----
+let shields = load('shields.json', { on: true, allow: [] });
+export function getShields() { return shields; }
+export function setShields(s) { shields = { on: s.on !== false, allow: Array.isArray(s.allow) ? s.allow : [] }; saveNow('shields.json', shields); }
+
 export function clearData(kind) {
   if (kind === 'history' || kind === 'all') { history = []; saveNow('history.json', history); }
   if (kind === 'bookmarks' || kind === 'all') { bookmarks = []; saveNow('bookmarks.json', bookmarks); }
