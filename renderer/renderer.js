@@ -40,6 +40,7 @@ const active = () => activePane || panes[0];
 function markActive() {   // visual focus indicator: accent the pane that has focus
   document.querySelectorAll('.pane.active').forEach((p) => p.classList.remove('active'));
   const p = active(); if (p && p.el) p.el.classList.add('active');
+  updateTitle();          // window title follows the focused pane
 }
 
 // ---- per-host custom favicons: give an icon to sites that have none (localhost, dev servers) ----
