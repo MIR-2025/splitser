@@ -33,6 +33,7 @@ const DEFAULT = { ...PRESETS.Default, img: '', dim: 35 };
 
 let theme = { ...DEFAULT };
 let panelEl, bodyEl, btn;
+let onChangeCb = null;   // notified after a user edit, so the renderer can store the theme on the current set
 
 function load() { try { const t = JSON.parse(localStorage.getItem('theme') || 'null'); if (t && typeof t === 'object') theme = { ...DEFAULT, ...t }; } catch (e) { /* defaults */ } }
 function persist() { try { localStorage.setItem('theme', JSON.stringify(theme)); } catch (e) { /* ignore */ } }
@@ -59,13 +60,15 @@ function apply() {
 // banner strip height = set-bar + one pane's tab strip + toolbar; the overshoot hides behind opaque panes
 function remeasure() {
   const setbar = document.getElementById('setbar');
-  const pane = document.querySelector('.pane');
+  // measure a VISIBLE pane -- the first .pane in the DOM may live in a hidden set (display:none),
+  // whose tab-strip/toolbar measure 0, which would collapse the banner to just the Workspaces bar.
+  const pane = [...document.querySelectorAll('.pane')].find((p) => p.offsetParent !== null) || document.querySelector('.pane');
   const strip = pane && pane.querySelector('.tabstrip');
   const bar = pane && pane.querySelector('.bar');
   const h = (setbar ? setbar.offsetHeight : 30) + (strip ? strip.offsetHeight : 28) + (bar ? bar.offsetHeight : 44);
   document.documentElement.style.setProperty('--banner-h', h + 'px');
 }
-function set(patch) { theme = { ...theme, ...patch }; apply(); persist(); renderPanel(); }
+function set(patch) { theme = { ...theme, ...patch }; apply(); persist(); renderPanel(); if (onChangeCb) onChangeCb({ ...theme }); }
 
 function renderPanel() {
   if (!bodyEl) return;
@@ -118,5 +121,10 @@ export const Theme = {
     apply(); renderPanel();
     window.addEventListener('resize', remeasure);
   },
+  // per-set theming: use() switches the applied theme (no onChange -- it's a programmatic switch),
+  // current() reads it to store on a set, onChange() fires only on the user's own panel edits.
+  use(t) { theme = t ? { ...DEFAULT, ...t } : { ...DEFAULT }; apply(); persist(); renderPanel(); },
+  current() { return { ...theme }; },
+  onChange(cb) { onChangeCb = cb; },
   remeasure
 };

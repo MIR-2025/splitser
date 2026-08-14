@@ -8,6 +8,7 @@ const gridRoot = document.getElementById('grid');   // parent element; holds one
 const setbar = document.getElementById('setbar');
 const hoverEl = document.getElementById('hoverurl');
 const infoEl = document.getElementById('paneinfo');
+const gridDimsEl = document.getElementById('grid-dims');   // the "C×R" text in the footer Grid button
 
 // SETS (workspaces): each set is an independent grid of panes with its own layout. Only the
 // current set is shown; the others stay in the DOM (display:none) so their webviews stay ALIVE.
@@ -362,10 +363,20 @@ function startDrag(e) {
   window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
 }
 function updateTitle() { const p = active(); document.title = (p && p.title) ? p.title + ' — Splitser' : 'Splitser'; }
+function curDims() {   // [cols, rows] of the current set's arrangement (cols mode = N columns × 1 row)
+  if (currentLayout === 'cols') return [Math.max(1, panes.length), 1];
+  return gridDims(currentLayout);
+}
+function updateGridBtn() {   // footer "Grid: C×R" label reflects the current arrangement
+  if (!gridDimsEl) return;
+  const [C, R] = curDims(); gridDimsEl.textContent = C + '×' + R;
+}
 function updateInfo() {
-  const lay = currentLayout === 'g2x2' ? ' · 2×2' : currentLayout === 'g3x3' ? ' · 3×3' : '';
+  const [C, R] = curDims();
+  const lay = (C === 1 && R === 1) ? '' : ' · ' + C + '×' + R;
   const setPart = sets.length > 1 ? 'set ' + (sets.indexOf(cur) + 1) + '/' + sets.length + ' · ' : '';
   infoEl.textContent = 'Splitser · ' + setPart + panes.length + (panes.length === 1 ? ' pane' : ' panes') + lay;
+  updateGridBtn();
 }
 
 // ---- resizable grids: fr tracks separated by real 6px divider tracks, so CSS positions the
@@ -377,18 +388,21 @@ function frLoad(key, n) {
 function frSave(key, arr) { try { localStorage.setItem('fr-' + key, JSON.stringify(arr)); } catch (e) { /* ignore */ } }
 function frTpl(arr) { return arr.map((f) => f.toFixed(4) + 'fr').join(' 6px '); }
 
+function gridDims(mode) {   // 'g{C}x{R}' -> [cols, rows]; default 2×2
+  const m = /^g(\d+)x(\d+)$/.exec(mode || ''); return m ? [+m[1], +m[2]] : [2, 2];
+}
 function applyGrid(mode) {
-  const n = mode === 'g2x2' ? 2 : 3;   // square grids: 2×2, 3×3
-  cur.gCols = frLoad(mode + '-c', n); cur.gRows = frLoad(mode + '-r', n);
+  const [C, R] = gridDims(mode);       // C columns × R rows (any shape up to 3×3)
+  cur.gCols = frLoad(mode + '-c', C); cur.gRows = frLoad(mode + '-r', R);
   grid.style.gap = '0'; grid.style.gridAutoRows = '1fr';
   grid.style.gridTemplateColumns = frTpl(cur.gCols);
   grid.style.gridTemplateRows = frTpl(cur.gRows);
-  panes.forEach((p, i) => { p.el.style.gridColumn = String((i % n) * 2 + 1); p.el.style.gridRow = String(Math.floor(i / n) * 2 + 1); });
+  panes.forEach((p, i) => { p.el.style.gridColumn = String((i % C) * 2 + 1); p.el.style.gridRow = String(Math.floor(i / C) * 2 + 1); });
   grid.querySelectorAll('.gdiv').forEach((d) => d.remove());
-  for (let c = 0; c < n - 1; c++) { const d = document.createElement('div'); d.className = 'gdiv x'; d.style.gridColumn = String(c * 2 + 2); d.style.gridRow = '1 / -1'; d.addEventListener('mousedown', (e) => startGridDrag(e, 'x', c)); grid.appendChild(d); }
-  for (let r = 0; r < n - 1; r++) { const d = document.createElement('div'); d.className = 'gdiv y'; d.style.gridRow = String(r * 2 + 2); d.style.gridColumn = '1 / -1'; d.addEventListener('mousedown', (e) => startGridDrag(e, 'y', r)); grid.appendChild(d); }
+  for (let c = 0; c < C - 1; c++) { const d = document.createElement('div'); d.className = 'gdiv x'; d.style.gridColumn = String(c * 2 + 2); d.style.gridRow = '1 / -1'; d.addEventListener('mousedown', (e) => startGridDrag(e, 'x', c)); grid.appendChild(d); }
+  for (let r = 0; r < R - 1; r++) { const d = document.createElement('div'); d.className = 'gdiv y'; d.style.gridRow = String(r * 2 + 2); d.style.gridColumn = '1 / -1'; d.addEventListener('mousedown', (e) => startGridDrag(e, 'y', r)); grid.appendChild(d); }
   // diagonal handles where a column divider crosses a row divider: drag to resize both axes at once
-  for (let c = 0; c < n - 1; c++) for (let r = 0; r < n - 1; r++) { const d = document.createElement('div'); d.className = 'gdiv xy'; d.style.gridColumn = String(c * 2 + 2); d.style.gridRow = String(r * 2 + 2); d.addEventListener('mousedown', (e) => startGridDragXY(e, c, r)); grid.appendChild(d); }
+  for (let c = 0; c < C - 1; c++) for (let r = 0; r < R - 1; r++) { const d = document.createElement('div'); d.className = 'gdiv xy'; d.style.gridColumn = String(c * 2 + 2); d.style.gridRow = String(r * 2 + 2); d.addEventListener('mousedown', (e) => startGridDragXY(e, c, r)); grid.appendChild(d); }
   updateInfo();
 }
 function startGridDrag(e, axis, idx) {
@@ -431,15 +445,20 @@ function startGridDragXY(e, ci, ri) {
   window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
 }
 
-// layout: 'cols' (resizable columns) | 'g2x2' | 'g3x3'. `fill` tops up to the grid's cell count.
-// Operates on the CURRENT set (via the mirrors). `save=false` while building sets at boot.
+// add/remove panes so the current set has exactly `n` (trims from the end, never below 1).
+function setPaneCount(n) {
+  while (panes.length < n) makePane(SETTINGS.home);
+  while (panes.length > n && panes.length > 1) {
+    const p = panes.pop(); p.el.remove();
+    if (activePane === p) activePane = panes[panes.length - 1] || null;
+  }
+}
+// layout: 'cols' (resizable columns, 1 row) | 'g{C}x{R}' (grid up to 3×3). `fill` sets the pane
+// count to the grid's cells. Operates on the CURRENT set. `save=false` while building sets at boot.
 function setLayout(mode, fill, save = true) {
   currentLayout = mode; if (cur) cur.layout = mode;
-  if (fill) {
-    const need = mode === 'g2x2' ? 4 : mode === 'g3x3' ? 9 : 0;
-    while (panes.length < need) makePane(SETTINGS.home);
-  }
-  grid.classList.remove('g2x2', 'g3x3');
+  if (fill && mode !== 'cols') { const [C, R] = gridDims(mode); setPaneCount(C * R); }
+  [...grid.classList].filter((c) => c === 'gmode').forEach((c) => grid.classList.remove(c));
   if (mode === 'cols') {
     grid.style.gridTemplateColumns = ''; grid.style.gridTemplateRows = ''; grid.style.gap = ''; grid.style.gridAutoRows = '';
     grid.querySelectorAll('.gdiv').forEach((d) => d.remove());
@@ -447,10 +466,10 @@ function setLayout(mode, fill, save = true) {
     rebuildGutters();
   } else {
     grid.querySelectorAll('.gutter').forEach((g) => g.remove());
-    grid.classList.add(mode);
+    grid.classList.add('gmode');
     applyGrid(mode);
   }
-  document.querySelectorAll('#layout-picker .lbtn').forEach((b) => b.classList.toggle('on', b.dataset.layout === mode));
+  updateGridBtn(); markActive();
   if (save) saveSession();
 }
 
@@ -460,7 +479,7 @@ function setLayout(mode, fill, save = true) {
 function createSet() {
   const el = document.createElement('div'); el.className = 'gridset'; el.style.display = 'none';
   gridRoot.appendChild(el);
-  const s = { el, panes: [], activePane: null, layout: 'cols', gCols: [], gRows: [] };
+  const s = { el, panes: [], activePane: null, layout: 'cols', gCols: [], gRows: [], name: '', theme: null };
   sets.push(s); return s;
 }
 function bindCur(s) { cur = s; grid = s.el; panes = s.panes; activePane = s.activePane; currentLayout = s.layout; }
@@ -469,7 +488,7 @@ function switchSet(s) {
   if (cur) cur.activePane = activePane;                 // persist the mirror to the outgoing set
   bindCur(s);
   sets.forEach((x) => { x.el.style.display = (x === s) ? '' : 'none'; });
-  document.querySelectorAll('#layout-picker .lbtn').forEach((b) => b.classList.toggle('on', b.dataset.layout === s.layout));
+  Theme.use(cur.theme);                                 // each set carries its own look
   renderSetbar(); updateTitle(); updateInfo(); markActive();
 }
 // build a set from saved specs (array of per-pane tab-URL arrays) without saving mid-build
@@ -482,7 +501,9 @@ function buildSet(layout, paneSpecs) {
 }
 function newSet() {
   if (cur) cur.activePane = activePane;
+  const inherit = Theme.current();                      // start the new workspace with the current look
   const s = buildSet('cols', [[SETTINGS.home], [SETTINGS.home]]);
+  s.theme = inherit;
   switchSet(s); saveSession();
   panes[0]?.addr.focus();
 }
@@ -493,24 +514,42 @@ function closeSet(s) {
   else renderSetbar();
   saveSession();
 }
-function renderSetbar() {
-  setbar.innerHTML = sets.map((s, i) => {
-    const favs = s.panes.map((p) => p.activeTab && p.activeTab.favicon).filter(Boolean);
-    const favHtml = favs.length
-      ? favs.slice(0, 4).map((f) => '<img class="setfav" src="' + f.replace(/"/g, '&quot;') + '" alt="" />').join('') +
-        (favs.length > 4 ? '<span class="setmore">+' + (favs.length - 4) + '</span>' : '')
-      : '<span class="setfav-none">&#127760;</span>';                 // globe until a favicon loads
-    return '<button class="setpill' + (s === cur ? ' on' : '') + '" data-i="' + i + '" title="Set ' + (i + 1) + '">' +
-      favHtml +
-      (sets.length > 1 ? '<span class="setclose" data-i="' + i + '" title="Close set">&#215;</span>' : '') +
-      '</button>';
-  }).join('') + '<button class="setadd" title="New set (Ctrl+T)">+</button>';
+function setName(s, i) {   // a workspace's label: user-set name, else its first site's host, else "Set N"
+  if (s.name) return s.name;
+  const p = s.panes[0];
+  const h = p && p.activeTab ? favHost(p.activeTab.url || (p.activeTab.view && p.activeTab.view.getURL())) : '';
+  return h || ('Set ' + (i + 1));
+}
+function renderSetbar() {   // the "Workspaces" bar: named pills that wrap across rows (like the Split Screen ext)
+  const pills = sets.map((s, i) => {
+    const fav = s.panes.map((p) => p.activeTab && p.activeTab.favicon).find(Boolean);
+    const name = setName(s, i);
+    return '<span class="setpill' + (s === cur ? ' on' : '') + '" data-i="' + i + '" title="' + esc(name).replace(/"/g, '&quot;') + '">' +
+      (fav ? '<img class="setfav" src="' + fav.replace(/"/g, '&quot;') + '" alt="" />' : '<span class="setfav-none">&#127760;</span>') +
+      '<span class="setname">' + esc(name) + '</span>' +
+      '<button class="setedit" data-i="' + i + '" title="Rename workspace">&#9998;</button>' +
+      (sets.length > 1 ? '<button class="setclose" data-i="' + i + '" title="Close workspace">&#215;</button>' : '') +
+      '</span>';
+  }).join('');
+  setbar.innerHTML = '<span class="setbar-label">Workspaces</span>' + pills + '<button class="setadd" title="New workspace (Ctrl+T)">+ New grid</button>';
+}
+function renameSet(s, pill) {
+  const nameEl = pill.querySelector('.setname'); if (!nameEl) return;
+  const input = document.createElement('input'); input.className = 'setname-edit';
+  input.value = s.name || nameEl.textContent;
+  nameEl.replaceWith(input); input.focus(); input.select();
+  let done = false;
+  const commit = (save) => { if (done) return; done = true; if (save) { s.name = input.value.trim(); saveSession(); } renderSetbar(); };
+  input.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); commit(true); } else if (e.key === 'Escape') commit(false); });
+  input.addEventListener('blur', () => commit(true));
+  input.addEventListener('click', (e) => e.stopPropagation());
 }
 setbar.addEventListener('click', (e) => {
   if (e.target.closest('.setadd')) return newSet();
   const pill = e.target.closest('.setpill'); if (!pill) return;
   const i = +pill.dataset.i;
   if (e.target.closest('.setclose')) { e.stopPropagation(); closeSet(sets[i]); }
+  else if (e.target.closest('.setedit')) { e.stopPropagation(); renameSet(sets[i], pill); }
   else if (sets[i] !== cur) switchSet(sets[i]);
 });
 
@@ -523,6 +562,8 @@ function saveSession() {
     const data = {
       v: 2, active: Math.max(0, sets.indexOf(cur)),
       sets: sets.map((s) => ({
+        name: s.name || '',
+        theme: s.theme || null,
         layout: s.layout,
         panes: s.panes.map((p) => p.tabs.map((t) => t.view.getURL()).filter((u) => /^https?:/.test(u))).filter((a) => a.length)
       }))
@@ -563,6 +604,7 @@ api.onHttpAuth((d) => showAuthDialog(d));
 function showAuthDialog(d) {
   document.querySelectorAll('.auth-modal').forEach((m) => m.remove());
   const pre = Vault.credsForHost(d.host) || { username: '', password: '' };
+  const locked = !Vault.unlocked();
   const where = (d.isProxy ? 'Proxy ' : '') + esc(d.host) + (d.port && d.port !== 80 && d.port !== 443 ? ':' + d.port : '');
   const modal = document.createElement('div');
   modal.className = 'auth-modal';
@@ -571,6 +613,7 @@ function showAuthDialog(d) {
     (d.realm ? '<div class="auth-realm">' + esc(d.realm) + '</div>' : '') +
     '<input class="auth-in" id="auth-user" placeholder="Username" autocomplete="off" />' +
     '<input class="auth-in" id="auth-pass" type="password" placeholder="Password" />' +
+    (locked ? '<button class="auth-unlock" id="auth-unlock">&#128273; Unlock vault to autofill</button>' : '') +
     '<div class="auth-row"><button class="auth-btn primary" id="auth-ok">Sign in</button><button class="auth-btn" id="auth-cancel">Cancel</button></div></div>';
   document.body.appendChild(modal);
   const user = modal.querySelector('#auth-user'), pass = modal.querySelector('#auth-pass');
@@ -579,6 +622,11 @@ function showAuthDialog(d) {
   const done = (ok) => { modal.remove(); api.httpAuthReply({ id: d.id, username: ok ? user.value : null, password: ok ? pass.value : '' }); };
   modal.querySelector('#auth-ok').onclick = () => done(true);
   modal.querySelector('#auth-cancel').onclick = () => done(false);
+  if (locked) modal.querySelector('#auth-unlock').onclick = () => {
+    modal.remove();                       // hide the dialog (main keeps waiting -- we haven't answered)
+    Vault.openPanel();                    // let the user unlock/create the vault
+    Vault.onNextUnlock(() => showAuthDialog(d));   // then re-open the dialog, now prefilled from the vault
+  };
   [user, pass].forEach((el) => el.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); done(true); } else if (e.key === 'Escape') done(false); }));
 }
 
@@ -648,7 +696,7 @@ gridRoot.addEventListener('mousedown', () => { document.querySelectorAll('.panel
 SETTINGS = await api.settingsGet();
 const saved = await api.sessionGet();
 if (saved && saved.v === 2 && Array.isArray(saved.sets) && saved.sets.length) {
-  saved.sets.forEach((s) => buildSet(s.layout || 'cols', Array.isArray(s.panes) ? s.panes : []));
+  saved.sets.forEach((ss) => { const st = buildSet(ss.layout || 'cols', Array.isArray(ss.panes) ? ss.panes : []); st.name = ss.name || ''; st.theme = ss.theme || null; });
   switchSet(sets[Math.min(saved.active || 0, sets.length - 1)]);
 } else if (Array.isArray(saved) && saved.length) {                 // legacy single-set session
   buildSet('cols', saved.map((e) => Array.isArray(e) ? e : [e]));
@@ -659,8 +707,31 @@ if (saved && saved.v === 2 && Array.isArray(saved.sets) && saved.sets.length) {
 }
 Vault.init({ api, getPanes: () => panes, getActive: () => active() });
 Theme.init();
+Theme.onChange((t) => { if (cur) { cur.theme = t; saveSession(); } });   // a theme edit belongs to the current set
+updateGridBtn();
 
-// layout picker (status bar) applies to the current set
-document.getElementById('layout-picker').addEventListener('click', (e) => {
-  const b = e.target.closest('.lbtn'); if (b) setLayout(b.dataset.layout, true);
-});
+// ---- footer Grid picker: a "Grid: C×R" button with a 3×3 hover-to-pick flyout (max 3×3) ----
+const gridBtn = document.getElementById('grid-btn');
+const gridFlyout = document.getElementById('grid-flyout');
+const gfMatrix = document.getElementById('gf-matrix');
+const gfLabel = document.getElementById('gf-label');
+for (let r = 1; r <= 3; r++) for (let c = 1; c <= 3; c++) {   // 9 cells, row-major
+  const cell = document.createElement('div'); cell.className = 'gf-cell'; cell.dataset.c = c; cell.dataset.r = r;
+  gfMatrix.appendChild(cell);
+}
+function gfHighlight(hc, hr) {   // light up the top-left hc×hr rectangle and label it
+  gfMatrix.querySelectorAll('.gf-cell').forEach((cell) => cell.classList.toggle('lit', +cell.dataset.c <= hc && +cell.dataset.r <= hr));
+  gfLabel.textContent = hc + ' × ' + hr;
+}
+function openGridFlyout(open) {
+  gridFlyout.hidden = !open;
+  if (open) { const [C, R] = curDims(); gfHighlight(Math.min(C, 3), Math.min(R, 3)); }
+}
+function pickGrid(c, r) {
+  if (r === 1) { setPaneCount(c); setLayout('cols', false); }   // one row -> resizable columns
+  else setLayout('g' + c + 'x' + r, true);                      // 2-D grid, fills to exactly c×r panes
+}
+gridBtn.addEventListener('click', (e) => { e.stopPropagation(); openGridFlyout(gridFlyout.hidden); });
+gfMatrix.addEventListener('mousemove', (e) => { const cell = e.target.closest('.gf-cell'); if (cell) gfHighlight(+cell.dataset.c, +cell.dataset.r); });
+gfMatrix.addEventListener('click', (e) => { const cell = e.target.closest('.gf-cell'); if (!cell) return; pickGrid(+cell.dataset.c, +cell.dataset.r); openGridFlyout(false); });
+document.addEventListener('click', (e) => { if (!gridFlyout.hidden && !e.target.closest('#grid-picker')) openGridFlyout(false); });

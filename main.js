@@ -110,6 +110,10 @@ function createWindow() {
     }
   });
   win.setMenuBarVisibility(false);
+  win.once('ready-to-show', () => {   // come to the front on launch -- don't hide behind whatever was focused (e.g. the terminal)
+    win.show(); win.moveTop(); win.focus();
+    try { app.focus({ steal: true }); } catch { /* not supported on some platforms */ }
+  });
   // Authoritatively harden every pane's <webview> from MAIN, so a future renderer bug/XSS can't
   // hand hostile content Node access. Force the safe prefs (don't merely rely on defaults), pin the
   // preload (a page can't spoof/replace it), and drop dangerous <webview> attributes if any appear.

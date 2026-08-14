@@ -14,10 +14,12 @@
   <div class="statusbar">
     <span class="hoverurl" id="hoverurl"></span>
     <div class="status-right">
-      <span class="layout-picker" id="layout-picker">
-        <button class="lbtn" data-layout="cols" title="Columns (Ctrl+1)">&#9707;</button>
-        <button class="lbtn" data-layout="g2x2" title="2×2 grid (Ctrl+2)">2&times;2</button>
-        <button class="lbtn" data-layout="g3x3" title="3×3 grid (Ctrl+3)">3&times;3</button>
+      <span class="grid-picker" id="grid-picker">
+        <button class="gbtn" id="grid-btn" title="Grid layout (up to 3×3)">Grid: <b id="grid-dims">1×1</b><span class="gcaret">&#9662;</span></button>
+        <div class="grid-flyout" id="grid-flyout" hidden>
+          <div class="gf-matrix" id="gf-matrix"></div>
+          <div class="gf-label" id="gf-label">1 × 1</div>
+        </div>
       </span>
       <button class="sbtn" id="btn-vault" title="Vault (passwords)">&#128273;</button>
       <button class="sbtn" id="btn-bookmarks" title="Bookmarks">&#9733;</button>

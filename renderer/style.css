@@ -16,27 +16,28 @@ body{
 .gridset{ flex:1 1 auto; min-width:0; min-height:0; display:flex; } /* one set; columns layout by default */
 /* 2-D grid layouts (Ctrl+2 / Ctrl+3): fr tracks + real 6px divider tracks, all set inline by
    applyGrid() so every internal gridline is a draggable .gdiv (both axes). */
-.gridset.g2x2, .gridset.g3x3{ display:grid; }
-.gridset.g2x2 .pane, .gridset.g3x3 .pane{ min-width:0; }
+.gridset.gmode{ display:grid; }                    /* any C×R grid (2-D layout); cols mode stays flex */
+.gridset.gmode .pane{ min-width:0; }
 
 /* ---- set bar (workspaces): switch/close/add whole grids ---- */
-.setbar{ flex:0 0 auto; display:flex; align-items:center; gap:3px; height:30px; padding:0 6px;
-  background:var(--chrome); border-bottom:1px solid var(--line); overflow-x:auto; }
-.setpill{ display:inline-flex; align-items:center; gap:5px; height:22px; padding:0 6px 0 9px;
-  border-radius:6px; border:1px solid transparent; background:transparent; color:var(--muted);
-  cursor:pointer; font-size:12px; font-variant-numeric:tabular-nums; }
-.setpill:hover{ background:var(--field); color:var(--text); }
-.setpill.on{ background:var(--field-focus); color:var(--text); border-color:var(--accent);
-  box-shadow:0 0 0 1px var(--accent) inset; }
-.setclose{ display:inline-flex; align-items:center; justify-content:center; width:15px; height:15px;
-  border-radius:3px; font-size:13px; line-height:1; color:var(--muted); }
-.setclose:hover{ background:var(--line-2); color:var(--text); }
-.setadd{ flex:0 0 auto; width:24px; height:22px; border:0; border-radius:6px; background:transparent;
-  color:var(--muted); cursor:pointer; font-size:16px; }
-.setadd:hover{ background:var(--field); color:var(--text); }
+.setbar{ flex:0 0 auto; display:flex; flex-wrap:wrap; align-items:center; gap:4px; min-height:32px; padding:4px 8px;
+  background:var(--chrome); border-bottom:1px solid var(--line); }        /* named workspace pills, wrapped across rows */
+.setbar-label{ flex:0 0 auto; font-size:11px; color:var(--muted); margin-right:2px; }
+.setpill{ display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 3px 0 8px;
+  border-radius:6px; border:1px solid var(--line); background:var(--field); color:var(--muted); cursor:pointer; font-size:12px; }
+.setpill:hover{ color:var(--text); border-color:var(--line-2); }
+.setpill.on{ background:var(--field-focus); color:var(--text); border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+.setname{ max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.setname-edit{ height:18px; width:110px; background:var(--field); color:var(--text); border:1px solid var(--accent);
+  border-radius:4px; padding:0 5px; font-size:12px; outline:none; }
+.setedit, .setclose{ display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px;
+  border:0; background:transparent; color:var(--muted); border-radius:3px; font-size:11px; line-height:1; cursor:pointer; opacity:.5; }
+.setedit:hover, .setclose:hover{ opacity:1; background:var(--line-2); color:var(--text); }
+.setadd{ flex:0 0 auto; height:24px; padding:0 10px; border:1px dashed var(--line-2); border-radius:6px;
+  background:transparent; color:var(--muted); cursor:pointer; font-size:12px; }
+.setadd:hover{ background:var(--field); color:var(--text); border-color:var(--accent); }
 .setfav{ width:14px; height:14px; flex:0 0 auto; border-radius:3px; }
 .setfav-none{ font-size:13px; opacity:.7; line-height:1; }
-.setmore{ font-size:10px; opacity:.6; }
 
 /* ---- per-pane tabs ---- */
 .tabstrip{
@@ -191,12 +192,19 @@ webview{ display:flex }
 }
 .sbtn:hover{background:var(--line); color:var(--text)}
 .dl-badge{color:var(--accent); font-size:10px}
-.layout-picker{display:inline-flex; border:1px solid var(--line-2); border-radius:6px; overflow:hidden; margin-right:2px}
-.lbtn{background:transparent; border:0; border-left:1px solid var(--line-2); color:var(--muted);
-  height:20px; padding:0 6px; font-size:10.5px; cursor:pointer; font-variant-numeric:tabular-nums}
-.lbtn:first-child{border-left:0; font-size:12px; padding:0 5px}
-.lbtn:hover{background:var(--line); color:var(--text)}
-.lbtn.on{background:var(--accent); color:#05130a}
+/* footer Grid picker: a "Grid: C×R" button with a 3×3 hover-to-pick flyout */
+.grid-picker{position:relative; display:inline-flex; margin-right:2px}
+.gbtn{display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 7px; border:1px solid var(--line-2);
+  border-radius:6px; background:transparent; color:var(--muted); cursor:pointer; font-size:11px}
+.gbtn:hover{background:var(--line); color:var(--text)}
+.gbtn b{color:var(--text); font-weight:600; font-variant-numeric:tabular-nums}
+.gcaret{font-size:8px; opacity:.7}
+.grid-flyout{position:absolute; bottom:26px; right:0; z-index:40; padding:8px;
+  background:var(--chrome); border:1px solid var(--line-2); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,.45)}
+.gf-matrix{display:grid; grid-template-columns:repeat(3,20px); grid-template-rows:repeat(3,20px); gap:4px}
+.gf-cell{border:1px solid var(--line-2); border-radius:3px; background:var(--field); cursor:pointer}
+.gf-cell.lit{background:var(--accent); border-color:var(--accent)}
+.gf-label{margin-top:6px; text-align:center; font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums}
 
 /* pop-over panels (bookmarks / downloads / settings) */
 .panel{
@@ -404,3 +412,12 @@ body.has-bgimg .tab.on{ background:rgba(0,0,0,.34); }
 .fp-c:hover{ border-color:var(--text); }
 .fp-auto{ width:100%; padding:6px; border:1px solid var(--line-2); border-radius:6px; background:var(--field); color:var(--text); cursor:pointer; font-size:12px; }
 .fp-auto:hover{ border-color:var(--accent); }
+
+.auth-unlock{ display:block; width:100%; margin-top:8px; padding:7px; border:1px dashed var(--line-2);
+  border-radius:8px; background:transparent; color:var(--accent); cursor:pointer; font-size:12.5px; }
+.auth-unlock:hover{ border-color:var(--accent); background:var(--field); }
+
+/* While a divider is being dragged, let the pointer pass THROUGH the webviews to the drag-shield.
+   Electron 43's newer webview compositing can otherwise sit above the shield and eat mousemove,
+   which broke pane/grid resizing. Scoped to an active drag via :has(.drag-shield). */
+body:has(.drag-shield) .view{ pointer-events:none; }

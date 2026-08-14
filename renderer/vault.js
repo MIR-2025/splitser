@@ -113,10 +113,12 @@ let api, getPanes, getActive;
 let key = null, entries = [], salt = null, iter = ITER, hasVault = false;
 let lockTimer = null;
 let pendingSave = null;   // a login captured while locked, re-offered after unlock
+let unlockCbs = [];       // one-shot callbacks to run after the next successful unlock
 const AUTOLOCK_MS = 15 * 60 * 1000;
 let panelEl, bodyEl, statusBtn;
 
 function unlocked() { return !!key; }
+function onNextUnlock(cb) { unlockCbs.push(cb); }
 function armLock() { clearTimeout(lockTimer); if (unlocked()) lockTimer = setTimeout(lock, AUTOLOCK_MS); }
 function refreshAllKeys() { getPanes().forEach(refreshPaneKey); }
 
@@ -141,6 +143,7 @@ async function unlock(master) {
   try { entries = await decryptObj(k, blob.iv, blob.data); } catch { return false; }  // GCM auth fail = wrong password
   key = k; armLock(); render(); refreshAllKeys();
   if (pendingSave) { const c = pendingSave; pendingSave = null; const p = getActive(); if (p) offerSave(p, c); }
+  if (unlockCbs.length) { const cbs = unlockCbs; unlockCbs = []; cbs.forEach((c) => { try { c(); } catch (e) { /* ignore */ } }); }
   return true;
 }
 function lock() { key = null; entries = []; clearTimeout(lockTimer); render(); refreshAllKeys(); }
@@ -397,5 +400,5 @@ export const Vault = {
     bodyEl.addEventListener('mousedown', armLock, true);
     return load();
   },
-  refreshPaneKey, fillPane, unlocked, togglePanel, offerSave, offerFill, hideFill, credsForHost
+  refreshPaneKey, fillPane, unlocked, togglePanel, offerSave, offerFill, hideFill, credsForHost, onNextUnlock, openPanel
 };
