@@ -184,7 +184,7 @@ function makePane(url, beforeEl = null, tabUrls = null) {
   el.querySelector('.fwd').addEventListener('click', () => { if (pane.view && pane.view.canGoForward()) pane.view.goForward(); });
   el.querySelector('.reload').addEventListener('click', () => pane.view && pane.view.reload());
   el.querySelector('.split').addEventListener('click', () => { const p = makePane(SETTINGS.home, el.nextElementSibling); rebuildGutters(); saveSession(); p.addr.focus(); });
-  el.querySelector('.close').addEventListener('click', () => closePane(pane));
+  el.querySelector('.close').addEventListener('click', () => requestClosePane(pane));
   star.addEventListener('click', pane.toggleBookmark);
   keyBtn.addEventListener('click', () => Vault.fillPane(pane));
   fav.addEventListener('click', (e) => { e.stopPropagation(); openFavPicker(pane); });   // set a custom icon (localhost etc.)
@@ -514,6 +514,47 @@ function closeSet(s) {
   else renderSetbar();
   saveSession();
 }
+// closing a workspace discards every pane + tab in it at once -- confirm first unless it's a lone single-tab pane
+function requestCloseSet(s) {
+  const tabs = s.panes.reduce((n, p) => n + p.tabs.length, 0);
+  if (s.panes.length <= 1 && tabs <= 1) { closeSet(s); return; }
+  const detail = s.panes.length > 1
+    ? s.panes.length + ' panes' + (tabs > s.panes.length ? ' and ' + tabs + ' tabs' : '')
+    : tabs + ' tabs';
+  confirmDialog({
+    title: 'Close "' + setName(s, sets.indexOf(s)) + '"?',
+    body: 'This workspace has ' + detail + '. Closing it discards them all -- this cannot be undone.',
+    okLabel: 'Close workspace'
+  }, () => closeSet(s));
+}
+// closing a pane discards its tabs (and closes the workspace if it's the last pane) -- confirm when it has 2+ tabs
+function requestClosePane(pane) {
+  const resetsOnly = panes.length <= 1 && sets.length <= 1;   // last pane of last set just reloads home -- not destructive
+  if (resetsOnly || pane.tabs.length <= 1) { closePane(pane); return; }
+  confirmDialog({
+    title: 'Close this pane?',
+    body: 'This pane has ' + pane.tabs.length + ' tabs. Closing it discards them all -- this cannot be undone.',
+    okLabel: 'Close pane'
+  }, () => closePane(pane));
+}
+// generic in-app confirm (styled like the auth dialog; NOT a blocking native confirm()). onOk runs on confirm.
+function confirmDialog({ title, body, okLabel }, onOk) {
+  document.querySelectorAll('.confirm-modal').forEach((m) => m.remove());
+  const modal = document.createElement('div'); modal.className = 'auth-modal confirm-modal';
+  modal.innerHTML = '<div class="auth-box">' +
+    '<div class="auth-h">' + esc(title) + '</div>' +
+    '<div class="auth-realm">' + esc(body) + '</div>' +
+    '<div class="auth-row"><button class="auth-btn" id="cf-cancel">Cancel</button>' +
+    '<button class="auth-btn danger" id="cf-ok">' + esc(okLabel || 'OK') + '</button></div></div>';
+  document.body.appendChild(modal);
+  const close = () => { modal.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
+  modal.querySelector('#cf-ok').onclick = () => { close(); onOk(); };
+  modal.querySelector('#cf-cancel').onclick = close;
+  modal.addEventListener('mousedown', (e) => { if (e.target === modal) close(); });   // click the backdrop to cancel
+  document.addEventListener('keydown', onKey);
+  modal.querySelector('#cf-cancel').focus();                                           // safe default
+}
 function setName(s, i) {   // a workspace's label: user-set name, else its first site's host, else "Set N"
   if (s.name) return s.name;
   const p = s.panes[0];
@@ -548,9 +589,13 @@ setbar.addEventListener('click', (e) => {
   if (e.target.closest('.setadd')) return newSet();
   const pill = e.target.closest('.setpill'); if (!pill) return;
   const i = +pill.dataset.i;
-  if (e.target.closest('.setclose')) { e.stopPropagation(); closeSet(sets[i]); }
+  if (e.target.closest('.setclose')) { e.stopPropagation(); requestCloseSet(sets[i]); }
   else if (e.target.closest('.setedit')) { e.stopPropagation(); renameSet(sets[i], pill); }
   else if (sets[i] !== cur) switchSet(sets[i]);
+});
+setbar.addEventListener('dblclick', (e) => {   // double-click a pill (not its × / ✎) to rename it inline
+  const pill = e.target.closest('.setpill');
+  if (pill && !e.target.closest('.setclose') && !e.target.closest('.setedit')) renameSet(sets[+pill.dataset.i], pill);
 });
 
 // ---- session persistence ----
