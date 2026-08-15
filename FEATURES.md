@@ -59,7 +59,8 @@ login doesn't hand a third-party extension read/write access across every site y
 - Address bar: URL or search (configurable engine). Real per-pane back / forward / reload / history.
 - **History-backed address autocomplete** (type → matches drop down, ↑/↓/Enter).
 - Native **find-in-page** (`Ctrl+F`) — real highlight + match count + next/prev.
-- Per-pane **zoom** (`Ctrl+=` / `-` / `0`), **mute** (`Ctrl+M`), and **print** (`Ctrl+P`, prints the focused pane).
+- Per-pane **zoom** (`Ctrl+=` / `-` / `0`, or **Ctrl+scroll**) — a transient "120%" badge on the pane
+  shows the level. **Mute** (`Ctrl+M`) and **print** (`Ctrl+P`, prints the focused pane).
 - **Right-click context menu** on web content: back/forward/reload, open link in new pane / new tab,
   copy link, image open/copy/save, cut/copy/paste in fields, "Search for …", inspect element.
 - **Local files (`file://`):** paste a bare path (`/…`, `~/…`, `C:\…`) into the address bar and it
@@ -83,6 +84,9 @@ login doesn't hand a third-party extension read/write access across every site y
 - **Bookmarks** (`Ctrl+D` / star; a `★` panel to open/remove). **Workspace bookmarks** — save the
   current workspace's whole layout + panes/tabs (`Ctrl+Shift+D`, or "Save workspace" in the panel)
   and reopen it later as a new set.
+- **Bookmark folders** — organize saved pages *and* saved workspaces into named, collapsible folders
+  (📁 Folder to create; a per-row menu moves an item into a folder; rename or delete a folder).
+  Deleting a folder keeps its bookmarks — they fall back to Ungrouped. Folders persist to disk.
 - **Session restore** — reopens the sets/panes/tabs (including `file://` tabs) you had open on
   relaunch; private workspaces are excluded.
 - **Downloads** — saved to the OS Downloads folder (server-set name is basename-only + collision-safe);

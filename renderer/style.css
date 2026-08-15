@@ -242,6 +242,45 @@ webview{ display:flex }
 .dl-bar{flex:0 0 100%; height:3px; background:var(--line); border-radius:2px; margin-top:4px; overflow:hidden}
 .dl-bar i{display:block; height:100%; background:var(--accent)}
 
+/* bookmark folders */
+.bm-h-actions{display:flex; align-items:center; gap:12px}
+.bm-folder{margin-bottom:1px}
+.bm-folder-h{display:flex; align-items:center; gap:6px; padding:6px 6px; border-radius:7px; cursor:pointer; user-select:none}
+.bm-folder-h:hover{background:var(--line)}
+.bm-caret{flex:0 0 auto; width:12px; text-align:center; color:var(--muted); font-size:10px}
+.bm-fold-name{flex:1 1 auto; min-width:0; color:var(--text); font-size:12.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.bm-fold-count{flex:0 0 auto; min-width:18px; text-align:center; color:var(--muted); font-size:11px; background:var(--line); border-radius:10px; padding:0 7px}
+.bm-fold-btn{flex:0 0 auto; width:20px; height:20px; background:transparent; border:0; border-radius:5px; color:var(--muted); cursor:pointer; font-size:13px; line-height:1}
+.bm-fold-btn:hover{background:var(--line-2); color:var(--text)}
+.bm-fold-rename-in{flex:1 1 auto; min-width:0; height:22px; background:var(--field); color:var(--text); border:1px solid var(--accent); border-radius:6px; padding:0 8px; font-size:12.5px; outline:none}
+.bm-folder-items{margin:1px 0 5px 13px; padding-left:8px; border-left:1px solid var(--line)}
+.bm-folder.collapsed .bm-folder-items{display:none}
+.bm-fold-empty{color:var(--muted); font-size:11.5px; font-style:italic; padding:5px 8px; margin:0}
+.bm-ungrouped-label{color:var(--muted); font-size:10.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; padding:9px 8px 3px}
+.row-folder{
+  flex:0 0 auto; max-width:96px; height:22px; background:var(--field); color:var(--muted);
+  border:1px solid var(--line); border-radius:6px; font-size:11px; padding:0 3px; cursor:pointer; outline:none;
+}
+.row-folder:hover{border-color:var(--line-2); color:var(--text)}
+.row-folder:focus{border-color:var(--accent)}
+.bm-newfolder{padding:4px 6px 8px}
+.bm-newfolder input{
+  width:100%; box-sizing:border-box; height:28px; background:var(--field); color:var(--text);
+  border:1px solid var(--accent); border-radius:7px; padding:0 9px; font-size:12.5px; outline:none;
+}
+
+/* transient per-pane zoom % indicator (Ctrl+scroll / Ctrl+=/-/0) */
+.zoom-badge{
+  position:absolute; top:12px; left:50%; z-index:45;
+  padding:5px 12px; border-radius:20px;
+  background:rgba(18,24,30,.92); color:#fff; border:1px solid var(--line-2);
+  font:600 13px/1 ui-monospace,Menlo,monospace; letter-spacing:.02em;
+  box-shadow:0 6px 20px rgba(0,0,0,.45);
+  opacity:0; pointer-events:none;
+  transform:translate(-50%,-8px); transition:opacity .12s ease, transform .12s ease;
+}
+.zoom-badge.show{opacity:1; transform:translate(-50%,0)}
+
 .settings{display:flex; flex-direction:column; gap:12px; padding:10px 8px}
 .settings label{display:flex; flex-direction:column; gap:5px; font-size:12px; color:var(--muted)}
 .settings .hint{color:var(--line-2); font-size:11px}

@@ -67,6 +67,41 @@ export function removeBookmark(key) {   // by workspace id OR page url
   return false;
 }
 
+// ---- bookmark folders: an ordered list of names; each bookmark carries an optional `folder`.
+// Deleting a folder NEVER deletes its bookmarks -- they just fall back to ungrouped. ----
+let bmFolders = load('bookmark-folders.json', []);
+export function getBookmarkFolders() { return bmFolders; }
+export function addBookmarkFolder(name) {
+  name = String(name || '').trim().slice(0, 40);
+  if (name && !bmFolders.includes(name)) { bmFolders.push(name); saveNow('bookmark-folders.json', bmFolders); }
+  return bmFolders;
+}
+export function renameBookmarkFolder(oldName, name) {
+  name = String(name || '').trim().slice(0, 40);
+  const i = bmFolders.indexOf(oldName);
+  if (i < 0 || !name || name === oldName) return bmFolders;
+  if (bmFolders.includes(name)) bmFolders.splice(i, 1);   // target exists -> merge into it
+  else bmFolders[i] = name;
+  bookmarks.forEach((b) => { if (b.folder === oldName) b.folder = name; });
+  saveNow('bookmark-folders.json', bmFolders); saveNow('bookmarks.json', bookmarks);
+  return bmFolders;
+}
+export function removeBookmarkFolder(name) {
+  const i = bmFolders.indexOf(name);
+  if (i < 0) return bmFolders;
+  bmFolders.splice(i, 1);
+  bookmarks.forEach((b) => { if (b.folder === name) b.folder = null; });   // un-file, keep the bookmarks
+  saveNow('bookmark-folders.json', bmFolders); saveNow('bookmarks.json', bookmarks);
+  return bmFolders;
+}
+export function setBookmarkFolder(key, folder) {   // key = workspace id OR page url; folder = name or null
+  folder = folder ? String(folder).trim().slice(0, 40) : null;
+  if (folder && !bmFolders.includes(folder)) { bmFolders.push(folder); saveNow('bookmark-folders.json', bmFolders); }
+  const b = bookmarks.find((x) => x.id === key || x.url === key);
+  if (b) { b.folder = folder; saveNow('bookmarks.json', bookmarks); }
+  return b || null;
+}
+
 // ---- session: the open sets/panes/tabs, restored on relaunch (array = legacy; object = v2 sets) ----
 let session = load('session.json', []);
 export function getSession() { return session; }
@@ -89,6 +124,6 @@ export function setShields(s) { shields = { on: s.on !== false, allow: Array.isA
 
 export function clearData(kind) {
   if (kind === 'history' || kind === 'all') { history = []; saveNow('history.json', history); }
-  if (kind === 'bookmarks' || kind === 'all') { bookmarks = []; saveNow('bookmarks.json', bookmarks); }
+  if (kind === 'bookmarks' || kind === 'all') { bookmarks = []; saveNow('bookmarks.json', bookmarks); bmFolders = []; saveNow('bookmark-folders.json', bmFolders); }
   if (kind === 'session' || kind === 'all') { session = []; saveNow('session.json', session); }
 }

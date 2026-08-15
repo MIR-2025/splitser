@@ -29,6 +29,11 @@ contextBridge.exposeInMainWorld('splitAPI', {
   bookmarkToggle: (entry) => ipcRenderer.invoke('bookmarks:toggle', entry),
   bookmarkWorkspace: (ws) => ipcRenderer.invoke('bookmarks:add-workspace', ws),   // save the whole workspace
   bookmarkRemove: (key) => ipcRenderer.invoke('bookmarks:remove', key),           // by workspace id or url
+  bookmarkFolders: () => ipcRenderer.invoke('bookmarks:folders'),
+  bookmarkFolderAdd: (name) => ipcRenderer.invoke('bookmarks:folder-add', name),
+  bookmarkFolderRename: (old, name) => ipcRenderer.invoke('bookmarks:folder-rename', { old, name }),
+  bookmarkFolderRemove: (name) => ipcRenderer.invoke('bookmarks:folder-remove', name),
+  bookmarkSetFolder: (key, folder) => ipcRenderer.invoke('bookmarks:set-folder', { key, folder }),
 
   // session (open pane URLs, restored on relaunch)
   sessionGet: () => ipcRenderer.invoke('session:get'),

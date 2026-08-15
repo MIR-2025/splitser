@@ -4,6 +4,21 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 (`.deb` / `.rpm` / `.AppImage` / `.exe` / `.dmg`) are built per tag and are currently
 **unsigned** — and only the **Linux** build has actually been run (see REQUIREMENTS.md).
 
+## 0.1.6 — 2026-08-15
+### Added
+- **Bookmark folders** — organize saved pages *and* saved workspaces into named, collapsible
+  folders in the Bookmarks panel. Create with 📁 Folder, move items with the per-row folder menu,
+  rename or delete a folder. Deleting a folder keeps its bookmarks — they fall back to Ungrouped.
+  Folders persist to disk.
+- **Zoom indicator** — a transient "120%" badge on the pane whenever you change zoom
+  (`Ctrl+scroll` or `Ctrl+=` / `-` / `0`).
+
+## 0.1.5 — 2026-08-15
+### Added
+- **Ctrl+scroll to zoom** a pane, in addition to `Ctrl+=` / `-` / `0`.
+### Fixed
+- `Ctrl++` (i.e. `Ctrl+Shift+=`) zoom-in regression introduced by the shortcut shift-prefix handling.
+
 ## 0.1.4 — 2026-08-15
 ### Added
 - **Workspace bookmarks** — save a whole workspace (layout + panes + tabs + name + theme) from

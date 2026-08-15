@@ -156,7 +156,16 @@ function makePane(url, beforeEl = null, tabUrls = null) {
   };
   pane.openFind = () => { if (!pane.view) return; findbar.hidden = false; findInput.focus(); findInput.select(); if (findInput.value) pane.view.findInPage(findInput.value); };
   pane.closeFind = () => { findbar.hidden = true; findCount.textContent = ''; if (pane.view) { pane.view.stopFindInPage('clearSelection'); pane.view.focus(); } };
-  pane.setZoom = (z) => { const t = pane.activeTab; if (!t) return; t.zoom = Math.max(0.4, Math.min(3, z)); pane.view.setZoomFactor(t.zoom); };
+  pane.setZoom = (z) => {
+    const t = pane.activeTab; if (!t) return;
+    t.zoom = Math.max(0.4, Math.min(3, z)); pane.view.setZoomFactor(t.zoom);
+    let b = pane._zoomBadge;                          // transient "120%" overlay, top-center of the pane
+    if (!b) { b = document.createElement('div'); b.className = 'zoom-badge'; pane.viewsBox.appendChild(b); pane._zoomBadge = b; }
+    b.textContent = Math.round(t.zoom * 100) + '%';
+    b.classList.add('show');
+    clearTimeout(pane._zoomBadgeT);
+    pane._zoomBadgeT = setTimeout(() => b.classList.remove('show'), 900);
+  };
   pane.toggleMute = () => { const t = pane.activeTab; if (!t) return; t.muted = !t.muted; pane.view.setAudioMuted(t.muted); muteBtn.hidden = false; muteBtn.innerHTML = t.muted ? '&#128263;' : '&#128266;'; };
   pane.updateShield = (info) => {
     pane.shieldInfo = info;
@@ -805,26 +814,118 @@ function openWorkspaceBookmark(ws) {   // reopen a saved workspace as a NEW set
   s.name = ws.name || ''; s.theme = ws.theme || null;
   switchSet(s); saveSession();
 }
+const bmCollapsed = new Set();   // folder names collapsed in the panel (this session)
+
 async function renderBookmarks() {
-  const bms = await api.bookmarksGet();
+  const [bms, folders] = await Promise.all([api.bookmarksGet(), api.bookmarkFolders()]);
   const list = document.getElementById('bm-list');
-  const wss = bms.filter((b) => b.type === 'workspace');
-  const urls = bms.filter((b) => b.type !== 'workspace');
-  const wsHtml = wss.map((b) => {
-    const n = (b.panes || []).length;
-    return `<div class="row"><a class="row-main" data-ws="${esc(b.id)}"><span class="row-t">&#9638; ${esc(b.name || 'Workspace')}</span><span class="row-u">${n} pane${n === 1 ? '' : 's'} · ${esc(b.layout || 'cols')}</span></a>` +
-      `<button class="row-x" data-key="${esc(b.id)}" title="Remove">&#215;</button></div>`;
-  }).join('');
-  const urlHtml = urls.map((b) =>
-    `<div class="row"><a class="row-main" data-url="${b.url.replace(/"/g, '&quot;')}"><span class="row-t">${esc(b.title || b.url)}</span><span class="row-u">${esc(b.url)}</span></a>` +
-    `<button class="row-x" data-key="${b.url.replace(/"/g, '&quot;')}" title="Remove">&#215;</button></div>`).join('');
-  list.innerHTML = (wsHtml + urlHtml) || '<p class="empty">No bookmarks yet — hit the &#9734; on any page, or Save workspace above.</p>';
+  const escA = (s) => esc(s).replace(/"/g, '&quot;');                       // attribute-safe
+  const folderSel = (key, cur) =>
+    `<select class="row-folder" data-key="${escA(String(key))}" title="Move to folder">` +
+    `<option value=""${cur ? '' : ' selected'}>no folder</option>` +
+    folders.map((f) => `<option value="${escA(f)}"${f === cur ? ' selected' : ''}>${esc(f)}</option>`).join('') +
+    `</select>`;
+  const rowHtml = (b) => {
+    const key = b.type === 'workspace' ? b.id : b.url;
+    const main = b.type === 'workspace'
+      ? `<a class="row-main" data-ws="${escA(b.id)}"><span class="row-t">&#9638; ${esc(b.name || 'Workspace')}</span><span class="row-u">${(b.panes || []).length} pane${(b.panes || []).length === 1 ? '' : 's'} · ${esc(b.layout || 'cols')}</span></a>`
+      : `<a class="row-main" data-url="${escA(b.url)}"><span class="row-t">${esc(b.title || b.url)}</span><span class="row-u">${esc(b.url)}</span></a>`;
+    return `<div class="row">${main}${folderSel(key, b.folder || '')}<button class="row-x" data-key="${escA(String(key))}" title="Remove">&#215;</button></div>`;
+  };
+
+  if (!bms.length && !folders.length) {
+    list.innerHTML = '<p class="empty">No bookmarks yet -- hit the &#9734; on any page, or Save workspace above. Use &#128193; Folder to group them.</p>';
+    return;
+  }
+
+  let html = '';
+  for (const f of folders) {                                               // folders in stored order
+    const items = bms.filter((b) => (b.folder || '') === f);
+    const collapsed = bmCollapsed.has(f);
+    html +=
+      `<div class="bm-folder${collapsed ? ' collapsed' : ''}">` +
+      `<div class="bm-folder-h" data-folder="${escA(f)}">` +
+        `<span class="bm-caret">${collapsed ? '&#9656;' : '&#9662;'}</span>` +
+        `<span class="bm-fold-name" data-folder="${escA(f)}">${esc(f)}</span>` +
+        `<span class="bm-fold-count">${items.length}</span>` +
+        `<button class="bm-fold-btn" data-rename="${escA(f)}" title="Rename folder">&#9998;</button>` +
+        `<button class="bm-fold-btn" data-delfolder="${escA(f)}" title="Delete folder (keeps its bookmarks)">&#215;</button>` +
+      `</div>` +
+      `<div class="bm-folder-items">${items.map(rowHtml).join('') || '<p class="bm-fold-empty">Empty -- assign bookmarks with the folder menu.</p>'}</div>` +
+      `</div>`;
+  }
+  const ungrouped = bms.filter((b) => !b.folder || !folders.includes(b.folder));
+  if (ungrouped.length) {
+    if (folders.length) html += '<div class="bm-ungrouped-label">Ungrouped</div>';
+    html += ungrouped.map(rowHtml).join('');
+  }
+  list.innerHTML = html;
 }
+
+function startFolderRename(btn) {
+  const oldName = btn.getAttribute('data-rename');
+  const nameEl = btn.closest('.bm-folder-h')?.querySelector('.bm-fold-name');
+  if (!nameEl) return;
+  const input = document.createElement('input');
+  input.className = 'bm-fold-rename-in'; input.type = 'text'; input.value = oldName; input.maxLength = 40;
+  nameEl.replaceWith(input);
+  input.focus(); input.select();
+  let done = false;
+  const commit = async (save) => {
+    if (done) return; done = true;
+    const name = input.value.trim();
+    if (save && name && name !== oldName) await api.bookmarkFolderRename(oldName, name);
+    renderBookmarks();
+  };
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); commit(true); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); commit(false); }
+  });
+  input.addEventListener('blur', () => commit(true));
+  input.addEventListener('click', (ev) => ev.stopPropagation());           // don't toggle collapse
+}
+
 document.getElementById('bm-add-ws').addEventListener('click', bookmarkCurrentWorkspace);
+document.getElementById('bm-add-folder').addEventListener('click', () => {
+  const list = document.getElementById('bm-list');
+  const existing = list.querySelector('.bm-newfolder');
+  if (existing) { existing.querySelector('input').focus(); return; }
+  const emptyMsg = list.querySelector('.empty'); if (emptyMsg) emptyMsg.remove();
+  const row = document.createElement('div');
+  row.className = 'bm-newfolder';
+  row.innerHTML = '<input type="text" placeholder="New folder name…" maxlength="40" />';
+  list.prepend(row);
+  const input = row.querySelector('input');
+  input.focus();
+  let done = false;
+  const commit = async () => {
+    if (done) return; done = true;
+    const name = input.value.trim();
+    if (name) await api.bookmarkFolderAdd(name);
+    renderBookmarks();
+  };
+  input.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); commit(); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); done = true; renderBookmarks(); }
+  });
+  input.addEventListener('blur', commit);
+});
+document.getElementById('bm-list').addEventListener('change', async (e) => {
+  const s = e.target.closest('.row-folder');
+  if (!s) return;
+  await api.bookmarkSetFolder(s.dataset.key, s.value || null);
+  renderBookmarks();
+});
 document.getElementById('bm-list').addEventListener('click', async (e) => {
-  const open = e.target.closest('.row-main');
+  const ren = e.target.closest('[data-rename]');
+  if (ren) { e.stopPropagation(); startFolderRename(ren); return; }
+  const del = e.target.closest('[data-delfolder]');
+  if (del) { e.stopPropagation(); await api.bookmarkFolderRemove(del.getAttribute('data-delfolder')); renderBookmarks(); return; }
+  const hdr = e.target.closest('.bm-folder-h');
+  if (hdr) { const f = hdr.getAttribute('data-folder'); if (bmCollapsed.has(f)) bmCollapsed.delete(f); else bmCollapsed.add(f); renderBookmarks(); return; }
   const rm = e.target.closest('.row-x');
   if (rm) { await api.bookmarkRemove(rm.dataset.key); renderBookmarks(); panes.forEach((p) => p.refreshStar()); return; }
+  const open = e.target.closest('.row-main');
   if (!open) return;
   if (open.dataset.ws) {
     const ws = (await api.bookmarksGet()).find((b) => b.id === open.dataset.ws);
