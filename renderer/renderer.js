@@ -726,7 +726,7 @@ api.onOpenTabIn((d) => { for (const s of sets) for (const p of s.panes) { if (p.
 api.onHttpAuth((d) => showAuthDialog(d));
 function showAuthDialog(d) {
   document.querySelectorAll('.auth-modal').forEach((m) => m.remove());
-  const pre = Vault.credsForHost(d.host) || { username: '', password: '' };
+  const pre = Vault.credsForHost(d.host, d.port) || { username: '', password: '' };
   const locked = !Vault.unlocked();
   const where = (d.isProxy ? 'Proxy ' : '') + esc(d.host) + (d.port && d.port !== 80 && d.port !== 443 ? ':' + d.port : '');
   const modal = document.createElement('div');

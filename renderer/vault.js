@@ -152,10 +152,15 @@ function matchesForUrl(url) {
   const h = hostOf(url); if (!h) return [];
   return entries.filter((e) => hostMatch(h, hostOf(e.url)));
 }
-// credentials for a bare host (used to prefill the HTTP-auth dialog); null if locked or no match
-function credsForHost(host) {
+// credentials for a host (+ optional port) -- prefills the HTTP-auth dialog. Prefers an entry whose
+// URL authority (host:port) matches exactly, so localhost:26613 and localhost:26702 don't collide;
+// falls back to a registrable-domain host match. null if locked or no match.
+function authorityOf(u) { try { return new URL(u).host; } catch { return ''; } }   // host incl. :port
+function credsForHost(host, port) {
   if (!unlocked() || !host) return null;
-  const m = entries.find((e) => hostMatch(host, hostOf(e.url)));
+  const wantAuth = (port && port !== 80 && port !== 443) ? host + ':' + port : host;
+  let m = entries.find((e) => authorityOf(e.url) === wantAuth);        // exact host:port
+  if (!m) m = entries.find((e) => hostMatch(host, hostOf(e.url)));     // else same registrable domain
   return m ? { username: m.username || '', password: m.password || '' } : null;
 }
 
