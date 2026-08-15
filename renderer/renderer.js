@@ -688,7 +688,7 @@ function saveSession() {
         name: s.name || '',
         theme: s.theme || null,
         layout: s.layout,
-        panes: s.panes.map((p) => p.tabs.map((t) => t.view.getURL()).filter((u) => /^https?:/.test(u))).filter((a) => a.length)
+        panes: s.panes.map((p) => p.tabs.map((t) => t.view.getURL()).filter((u) => /^(https?|file):/.test(u))).filter((a) => a.length)
       }))
     };
     api.sessionSet(data);
