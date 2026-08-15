@@ -91,11 +91,11 @@ function buildContextMenu(contents, p) {
 
 // Shell shortcuts intercepted on every webContents (host + each webview) so they fire even
 // while a page has focus (webview key events don't bubble to the host).
-const SHORTCUTS = new Set(['t', 'w', 'l', 'r', 'f', 'm', 'd', 'k', 'p', '1', '2', '3', '=', '+', '-', '0']);
+const SHORTCUTS = new Set(['t', 'w', 'l', 'r', 'f', 'm', 'd', 'k', 'p', '1', '2', '3', '=', '+', '-', '0', 'shift+n']);
 function wireShortcuts(contents) {
   contents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown' || !(input.control || input.meta) || input.alt) return;
-    const k = (input.key || '').toLowerCase();
+    const k = (input.shift ? 'shift+' : '') + (input.key || '').toLowerCase();   // shift+n = new incognito
     if (SHORTCUTS.has(k)) { event.preventDefault(); if (win) win.webContents.send('shortcut', k); }
   });
 }
@@ -150,6 +150,10 @@ ipcMain.on('app:home', (e) => { e.returnValue = app.getPath('home'); });   // sy
 ipcMain.on('open-downloads', () => shell.openPath(app.getPath('downloads')));
 ipcMain.on('download:open', (_e, p) => { if (dlPaths.has(p)) shell.openPath(p); });
 ipcMain.on('download:reveal', (_e, p) => { if (dlPaths.has(p)) shell.showItemInFolder(p); });
+ipcMain.on('incognito:clear', () => {   // wipe the ephemeral session when the last private workspace closes
+  const s = electronSession.fromPartition('split-incognito');
+  Promise.all([s.clearStorageData(), s.clearCache()]).catch(() => {});
+});
 
 // vault: main only reads/writes the encrypted blob (never the key or plaintext)
 ipcMain.handle('vault:get', () => store.getVault());
@@ -194,54 +198,53 @@ app.whenReady().then(() => {
   // sign-in, banks) refuse or degrade for anything advertising Electron -- bad for a logged-in-apps browser.
   app.userAgentFallback = app.userAgentFallback.replace(/ (Splitser|Electron)\/\S+/g, '');
 
-  const ses = electronSession.fromPartition('persist:split');
+  initAdblock();   // engine loads async; the per-session handler no-ops until ready
 
-  // ad/tracker blocking on the shared session (engine loads async; handler no-ops until ready)
-  ses.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, onBeforeRequest);
-  initAdblock();
-
-  // downloads: save to the Downloads folder, stream progress to the renderer
-  const dlDir = process.env.SPLITSER_DL_DIR || app.getPath('downloads');   // env override lets tests isolate downloads
+  // downloads land here; env override lets tests isolate downloads
+  const dlDir = process.env.SPLITSER_DL_DIR || app.getPath('downloads');
   try { fs.mkdirSync(dlDir, { recursive: true }); } catch { /* Downloads already exists */ }
   let dlId = 0;
-  ses.on('will-download', (_e, item) => {
-    const id = ++dlId;
-    const name = path.basename(item.getFilename() || 'download');   // server-controlled -> basename only, no traversal
-    let dest = path.join(dlDir, name);
-    if (fs.existsSync(dest)) {                                       // don't silently overwrite an existing file
-      const ext = path.extname(name), base = name.slice(0, name.length - ext.length);
-      let i = 1; do { dest = path.join(dlDir, base + ' (' + (i++) + ')' + ext); } while (fs.existsSync(dest));
-    }
-    item.setSavePath(dest);
-    dlPaths.add(dest);                                               // gate open/reveal to files we actually saved
-    const finalName = path.basename(dest);
-    const emit = (state) => win && win.webContents.send('download-update', {
-      id, name: finalName, path: dest, received: item.getReceivedBytes(), total: item.getTotalBytes(), state
-    });
-    item.on('updated', (_ev, s) => emit(s));
-    item.once('done', (_ev, s) => emit(s));
-    emit('progressing');
-  });
-
-  // Permissions: default-DENY. Only a couple of harmless ones auto-allow; a known-sensitive set
-  // prompts; everything else (clipboard-READ, display-capture, usb/serial/hid, idle-detection,
-  // window-management, ...) is denied outright. This closes the clipboard-read path a hostile page
-  // could use to lift a vault password the user just copied.
+  // Permissions: default-DENY. A couple of harmless ones auto-allow; a known-sensitive set prompts;
+  // everything else (clipboard-READ, display-capture, usb/serial/hid, ...) is denied outright.
   const AUTO_ALLOW = new Set(['fullscreen', 'clipboard-sanitized-write']);
   const PROMPT = new Set(['media', 'geolocation', 'notifications', 'midi', 'midiSysex', 'pointerLock']);
-  ses.setPermissionRequestHandler(async (wc, permission, callback, details) => {
-    if (AUTO_ALLOW.has(permission)) return callback(true);
-    if (!PROMPT.has(permission)) return callback(false);   // default-deny everything else
-    const { response } = await dialog.showMessageBox(win, {
-      type: 'question', buttons: ['Block', 'Allow'], defaultId: 0, cancelId: 0,
-      title: 'Splitser', message: 'Allow ' + permission + '?',
-      detail: (details && details.requestingUrl) || (wc && wc.getURL()) || ''
+
+  // Apply the SAME protections (ad/tracker blocking, download handling, default-deny permissions) to
+  // every session -- the persistent one AND the ephemeral 'split-incognito' one that private workspaces use.
+  function wireSession(ses) {
+    ses.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, onBeforeRequest);
+    ses.on('will-download', (_e, item) => {
+      const id = ++dlId;
+      const name = path.basename(item.getFilename() || 'download');   // server-controlled -> basename only
+      let dest = path.join(dlDir, name);
+      if (fs.existsSync(dest)) {
+        const ext = path.extname(name), base = name.slice(0, name.length - ext.length);
+        let i = 1; do { dest = path.join(dlDir, base + ' (' + (i++) + ')' + ext); } while (fs.existsSync(dest));
+      }
+      item.setSavePath(dest);
+      dlPaths.add(dest);
+      const finalName = path.basename(dest);
+      const emit = (state) => win && win.webContents.send('download-update', {
+        id, name: finalName, path: dest, received: item.getReceivedBytes(), total: item.getTotalBytes(), state
+      });
+      item.on('updated', (_ev, s) => emit(s));
+      item.once('done', (_ev, s) => emit(s));
+      emit('progressing');
     });
-    callback(response === 1);
-  });
-  // The sync permission CHECK gates the async Clipboard API (clipboard-read) and permissions.query;
-  // only the auto-allow set passes here, so clipboard-read is denied even without a request prompt.
-  ses.setPermissionCheckHandler((_wc, permission) => AUTO_ALLOW.has(permission));
+    ses.setPermissionRequestHandler(async (wc, permission, callback, details) => {
+      if (AUTO_ALLOW.has(permission)) return callback(true);
+      if (!PROMPT.has(permission)) return callback(false);   // default-deny everything else
+      const { response } = await dialog.showMessageBox(win, {
+        type: 'question', buttons: ['Block', 'Allow'], defaultId: 0, cancelId: 0,
+        title: 'Splitser', message: 'Allow ' + permission + '?',
+        detail: (details && details.requestingUrl) || (wc && wc.getURL()) || ''
+      });
+      callback(response === 1);
+    });
+    ses.setPermissionCheckHandler((_wc, permission) => AUTO_ALLOW.has(permission));   // gates clipboard-read etc.
+  }
+  wireSession(electronSession.fromPartition('persist:split'));
+  wireSession(electronSession.fromPartition('split-incognito'));   // in-memory session for private workspaces
 
   // a page opening a popup / target=_blank -> a new PANE; shortcuts on every webview
   app.on('web-contents-created', (_e, contents) => {

@@ -39,8 +39,14 @@ body{
 .setadd{ flex:0 0 auto; height:24px; padding:0 10px; border:1px dashed var(--line-2); border-radius:6px;
   background:transparent; color:var(--muted); cursor:pointer; font-size:12px; }
 .setadd:hover{ background:var(--field); color:var(--text); border-color:var(--accent); }
+.setinc{ flex:0 0 auto; height:24px; padding:0 8px; border:1px solid var(--line-2); border-radius:6px;   /* new private workspace */
+  background:transparent; color:var(--muted); cursor:pointer; font-size:13px; line-height:1; }
+.setinc:hover{ background:color-mix(in srgb, #6b4ea6 22%, var(--field)); color:var(--text); border-color:#8a6fd0; }
 .setfav{ width:14px; height:14px; flex:0 0 auto; border-radius:3px; }
 .setfav-none{ font-size:13px; opacity:.7; line-height:1; }
+.setinc-ico{ font-size:13px; line-height:1; }
+.setpill.incognito{ background:color-mix(in srgb, #6b4ea6 24%, var(--field)); border-color:#6b4ea6; }   /* private = purple */
+.setpill.incognito.on{ background:color-mix(in srgb, #6b4ea6 42%, var(--field-focus)); border-color:#9a7fe0; box-shadow:0 0 0 1px #9a7fe0 inset; }
 
 /* ---- per-pane tabs ---- */
 .tabstrip{

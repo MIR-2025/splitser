@@ -139,6 +139,7 @@ function makePane(url, beforeEl = null, tabUrls = null) {
     get title() { return this.activeTab ? this.activeTab.title : ''; },
     get zoom() { return this.activeTab ? this.activeTab.zoom : 1; }
   };
+  pane.incognito = !!(cur && cur.incognito);   // private-workspace panes: ephemeral session, no history
   panes.push(pane);
 
   pane.syncAddr = () => { const u = pane.view && pane.view.getURL(); if (u && u !== 'about:blank' && document.activeElement !== addr) addr.value = u; };
@@ -267,7 +268,7 @@ function mdViewerInject() {
 function addTab(pane, url) {
   const view = document.createElement('webview');
   view.className = 'view';
-  view.setAttribute('partition', 'persist:split');
+  view.setAttribute('partition', pane.incognito ? 'split-incognito' : 'persist:split');   // ephemeral in private workspaces
   view.setAttribute('allowpopups', '');
   pane.viewsBox.appendChild(view);
   view.setAttribute('src', url || SETTINGS.home);
@@ -293,7 +294,7 @@ function addTab(pane, url) {
   view.addEventListener('did-navigate-in-page', () => { tab.url = view.getURL(); if (active()) pane.syncAddr(); });
   view.addEventListener('dom-ready', () => { try { tab.wcId = view.getWebContentsId(); } catch (e) { /* not attached yet */ } if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); pane.refreshShield(); } });
   view.addEventListener('did-start-loading', () => { tab.loading = true; tabEl.classList.add('loading'); if (active()) pane.spin.hidden = false; });
-  view.addEventListener('did-stop-loading', () => { tab.loading = false; tabEl.classList.remove('loading'); if (active()) { pane.spin.hidden = true; pane.syncAddr(); } const u = view.getURL(); if (/^https?:/.test(u)) api.historyAdd({ url: u, title: tab.title });
+  view.addEventListener('did-stop-loading', () => { tab.loading = false; tabEl.classList.remove('loading'); if (active()) { pane.spin.hidden = true; pane.syncAddr(); } const u = view.getURL(); if (/^https?:/.test(u) && !pane.incognito) api.historyAdd({ url: u, title: tab.title });
     if (/^file:\/\/.*\.(md|markdown)(\?|#|$)/i.test(u)) view.executeJavaScript('(' + mdViewerInject.toString() + ')()').catch(() => {}); });   // render local markdown
   view.addEventListener('page-title-updated', (e) => { tab.title = e.title || tab.url; ttitle.textContent = tab.title; tabEl.title = tab.title; if (active()) updateTitle(); });
   view.addEventListener('page-favicon-updated', (e) => { const f = (e.favicons || [])[0]; if (f) tab.realFavicon = f; syncFav(); });
@@ -550,7 +551,7 @@ function setLayout(mode, fill, save = true) {
 function createSet() {
   const el = document.createElement('div'); el.className = 'gridset'; el.style.display = 'none';
   gridRoot.appendChild(el);
-  const s = { el, panes: [], activePane: null, layout: 'cols', gCols: [], gRows: [], name: '', theme: null };
+  const s = { el, panes: [], activePane: null, layout: 'cols', gCols: [], gRows: [], name: '', theme: null, incognito: false };
   sets.push(s); return s;
 }
 function bindCur(s) { cur = s; grid = s.el; panes = s.panes; activePane = s.activePane; currentLayout = s.layout; }
@@ -563,8 +564,8 @@ function switchSet(s) {
   renderSetbar(); updateTitle(); updateInfo(); markActive();
 }
 // build a set from saved specs (array of per-pane tab-URL arrays) without saving mid-build
-function buildSet(layout, paneSpecs) {
-  const s = createSet(); bindCur(s);
+function buildSet(layout, paneSpecs, incognito) {
+  const s = createSet(); s.incognito = !!incognito; bindCur(s);   // set incognito BEFORE makePane (panes read it)
   (paneSpecs && paneSpecs.length ? paneSpecs : [[SETTINGS.home], [SETTINGS.home]]).forEach((t) => makePane(t[0], null, t));
   activePane = s.activePane = panes[0];
   setLayout(layout || 'cols', false, false);
@@ -578,11 +579,19 @@ function newSet() {
   switchSet(s); saveSession();
   panes[0]?.addr.focus();
 }
+function newIncognitoSet() {   // a private workspace: ephemeral 'split-incognito' session, no history, not restored
+  if (cur) cur.activePane = activePane;
+  const s = buildSet('cols', [[SETTINGS.home], [SETTINGS.home]], true);
+  switchSet(s); saveSession();
+  panes[0]?.addr.focus();
+}
 function closeSet(s) {
   if (sets.length <= 1) return;
+  const wasIncognito = s.incognito;
   const i = sets.indexOf(s); s.el.remove(); sets.splice(i, 1);
   if (cur === s) { cur = null; switchSet(sets[Math.min(i, sets.length - 1)]); }
   else renderSetbar();
+  if (wasIncognito && !sets.some((x) => x.incognito)) api.clearIncognito();   // last private workspace closed -> wipe
   saveSession();
 }
 // closing a workspace discards every pane + tab in it at once -- confirm first unless it's a lone single-tab pane
@@ -628,6 +637,7 @@ function confirmDialog({ title, body, okLabel }, onOk) {
 }
 function setName(s, i) {   // a workspace's label: user-set name, else its first site's host, else "Set N"
   if (s.name) return s.name;
+  if (s.incognito) return 'Private';
   const p = s.panes[0];
   const h = p && p.activeTab ? favHost(p.activeTab.url || (p.activeTab.view && p.activeTab.view.getURL())) : '';
   return h || ('Set ' + (i + 1));
@@ -642,14 +652,16 @@ function renderSetbar() {   // the "Workspaces" bar: named pills that wrap acros
   const pills = sets.map((s, i) => {
     const fav = s.panes.map((p) => p.activeTab && p.activeTab.favicon).find(Boolean);
     const name = setName(s, i);
-    return '<span class="setpill' + (s === cur ? ' on' : '') + '" data-i="' + i + '" title="' + esc(name).replace(/"/g, '&quot;') + '">' +
-      (fav ? '<img class="setfav" src="' + fav.replace(/"/g, '&quot;') + '" alt="" />' : '<span class="setfav-none">&#127760;</span>') +
+    return '<span class="setpill' + (s === cur ? ' on' : '') + (s.incognito ? ' incognito' : '') + '" data-i="' + i + '" title="' + esc(name).replace(/"/g, '&quot;') + (s.incognito ? ' (private -- nothing saved)' : '') + '">' +
+      (s.incognito ? '<span class="setinc-ico">&#128374;</span>' : (fav ? '<img class="setfav" src="' + fav.replace(/"/g, '&quot;') + '" alt="" />' : '<span class="setfav-none">&#127760;</span>')) +
       '<span class="setname">' + esc(name) + '</span>' +
       '<button class="setedit" data-i="' + i + '" title="Rename workspace">&#9998;</button>' +
       (sets.length > 1 ? '<button class="setclose" data-i="' + i + '" title="Close workspace">&#215;</button>' : '') +
       '</span>';
   }).join('');
-  setbar.innerHTML = LOGO_SVG + pills + '<button class="setadd" title="New workspace (Ctrl+T)">+ Workspace</button>';
+  setbar.innerHTML = LOGO_SVG + pills +
+    '<button class="setadd" title="New workspace (Ctrl+T)">+ Workspace</button>' +
+    '<button class="setinc" title="New private workspace -- ephemeral, nothing saved (Ctrl+Shift+N)">&#128374;</button>';
 }
 function renameSet(s, pill) {
   const nameEl = pill.querySelector('.setname'); if (!nameEl) return;
@@ -664,6 +676,7 @@ function renameSet(s, pill) {
 }
 setbar.addEventListener('click', (e) => {
   if (e.target.closest('.setbar-logo')) return setLayout('split12', true);   // the logo IS a layout -- apply it
+  if (e.target.closest('.setinc')) return newIncognitoSet();
   if (e.target.closest('.setadd')) return newSet();
   const pill = e.target.closest('.setpill'); if (!pill) return;
   const i = +pill.dataset.i;
@@ -682,9 +695,10 @@ function saveSession() {
   clearTimeout(sessTimer);
   sessTimer = setTimeout(() => {
     if (cur) cur.activePane = activePane;
+    const persist = sets.filter((s) => !s.incognito);   // private workspaces are ephemeral -- never saved
     const data = {
-      v: 2, active: Math.max(0, sets.indexOf(cur)),
-      sets: sets.map((s) => ({
+      v: 2, active: Math.max(0, persist.indexOf(cur)),   // cur incognito -> indexOf -1 -> 0
+      sets: persist.map((s) => ({
         name: s.name || '',
         theme: s.theme || null,
         layout: s.layout,
@@ -700,6 +714,7 @@ function handleShortcut(k) {
   const p = active();
   if (k === 'l') p?.addr.focus();
   else if (k === 't') newSet();                                                         // new SET (fresh grid); tabs open via the strip +
+  else if (k === 'shift+n') newIncognitoSet();                                          // new PRIVATE workspace
   else if (k === 'w') { if (p && p.activeTab) closeTab(p, p.activeTab); }               // close TAB (last tab -> pane; last pane -> set)
   else if (k === 'r') p?.view.reload();
   else if (k === 'f') p?.openFind();
