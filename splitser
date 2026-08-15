@@ -8,6 +8,9 @@
 #   ./splitser stop       stop all Splitser processes
 #   ./splitser status     is it running?
 #   ./splitser restart
+#   ./splitser new [name] open a SEPARATE instance with its OWN profile
+#                         (~/.config/splitser-<name>, default 'scratch') -- independent
+#                         session/vault/logins, runs alongside the main one.
 #
 # Env: SPLITSER_DIR overrides the app dir; SPLITSER_LOG overrides the log path.
 
@@ -47,8 +50,25 @@ case "${1:-start}" in
     echo "  log:  $LOG"
     echo "  stop: $0 stop"
     ;;
+  new)
+    # a SEPARATE instance with its own --user-data-dir, so it never shares/clobbers the main
+    # profile (session, vault, cookies). Repeatable: `splitser new work` reuses ~/.config/splitser-work.
+    if [ ! -x "$ELEC" ]; then
+      echo "Electron isn't installed. Run:  (cd \"$APP\" && npm install)" >&2
+      exit 1
+    fi
+    name="${2:-scratch}"
+    prof="$HOME/.config/splitser-$name"
+    nlog="$HOME/.splitser-$name.log"
+    cd "$APP" || exit 1
+    setsid nohup "$ELEC" . --no-sandbox --user-data-dir="$prof" >"$nlog" 2>&1 </dev/null &
+    echo "Opened a separate Splitser '$name', detached -- runs alongside your main one."
+    echo "  profile: $prof   (its own session, vault, logins)"
+    echo "  log:     $nlog"
+    echo "  reset:   quit it, then rm -rf \"$prof\""
+    ;;
   *)
-    echo "usage: $0 [start|stop|status|restart]" >&2
+    echo "usage: $0 [start|stop|status|restart|new [name]]" >&2
     exit 2
     ;;
 esac
