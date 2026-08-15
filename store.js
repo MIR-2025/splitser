@@ -46,7 +46,7 @@ export function queryHistory(q) {
   return hits.slice(0, 8).map((e) => ({ url: e.u, title: e.t }));
 }
 
-// ---- bookmarks: [{url, title}] ----
+// ---- bookmarks: page bookmarks {url, title} OR workspace bookmarks {type:'workspace', id, name, layout, theme, panes} ----
 let bookmarks = load('bookmarks.json', []);
 export function getBookmarks() { return bookmarks; }
 export function hasBookmark(url) { return bookmarks.some((b) => b.url === url); }
@@ -54,6 +54,17 @@ export function toggleBookmark(url, title) {
   const i = bookmarks.findIndex((b) => b.url === url);
   if (i >= 0) { bookmarks.splice(i, 1); saveNow('bookmarks.json', bookmarks); return false; }
   bookmarks.unshift({ url, title: title || url }); saveNow('bookmarks.json', bookmarks); return true;
+}
+export function addWorkspaceBookmark(ws) {
+  const entry = { type: 'workspace', id: 'ws-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    name: (ws && ws.name) || 'Workspace', layout: (ws && ws.layout) || 'cols', theme: (ws && ws.theme) || null,
+    panes: (ws && Array.isArray(ws.panes)) ? ws.panes : [] };
+  bookmarks.unshift(entry); saveNow('bookmarks.json', bookmarks); return entry;
+}
+export function removeBookmark(key) {   // by workspace id OR page url
+  const i = bookmarks.findIndex((b) => b.id === key || b.url === key);
+  if (i >= 0) { bookmarks.splice(i, 1); saveNow('bookmarks.json', bookmarks); return true; }
+  return false;
 }
 
 // ---- session: the open sets/panes/tabs, restored on relaunch (array = legacy; object = v2 sets) ----

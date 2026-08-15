@@ -91,7 +91,7 @@ function buildContextMenu(contents, p) {
 
 // Shell shortcuts intercepted on every webContents (host + each webview) so they fire even
 // while a page has focus (webview key events don't bubble to the host).
-const SHORTCUTS = new Set(['t', 'w', 'l', 'r', 'f', 'm', 'd', 'k', 'p', '1', '2', '3', '=', '+', '-', '0', 'shift+n']);
+const SHORTCUTS = new Set(['t', 'w', 'l', 'r', 'f', 'm', 'd', 'k', 'p', '1', '2', '3', '=', '+', '-', '0', 'shift+n', 'shift+d']);
 function wireShortcuts(contents) {
   contents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown' || !(input.control || input.meta) || input.alt) return;
@@ -140,6 +140,8 @@ ipcMain.handle('history:query', (_e, q) => store.queryHistory(q));
 ipcMain.handle('bookmarks:get', () => store.getBookmarks());
 ipcMain.handle('bookmarks:has', (_e, url) => store.hasBookmark(url));
 ipcMain.handle('bookmarks:toggle', (_e, { url, title }) => store.toggleBookmark(url, title));
+ipcMain.handle('bookmarks:add-workspace', (_e, ws) => store.addWorkspaceBookmark(ws));
+ipcMain.handle('bookmarks:remove', (_e, key) => store.removeBookmark(key));
 ipcMain.handle('session:get', () => store.getSession());
 ipcMain.on('session:set', (_e, urls) => store.setSession(urls));
 ipcMain.handle('settings:get', () => store.getSettings());

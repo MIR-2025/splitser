@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld('splitAPI', {
   bookmarksGet: () => ipcRenderer.invoke('bookmarks:get'),
   bookmarkHas: (url) => ipcRenderer.invoke('bookmarks:has', url),
   bookmarkToggle: (entry) => ipcRenderer.invoke('bookmarks:toggle', entry),
+  bookmarkWorkspace: (ws) => ipcRenderer.invoke('bookmarks:add-workspace', ws),   // save the whole workspace
+  bookmarkRemove: (key) => ipcRenderer.invoke('bookmarks:remove', key),           // by workspace id or url
 
   // session (open pane URLs, restored on relaunch)
   sessionGet: () => ipcRenderer.invoke('session:get'),

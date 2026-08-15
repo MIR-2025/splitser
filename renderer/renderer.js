@@ -720,6 +720,7 @@ function handleShortcut(k) {
   else if (k === 'f') p?.openFind();
   else if (k === 'm') p?.toggleMute();
   else if (k === 'd') p?.toggleBookmark();
+  else if (k === 'shift+d') bookmarkCurrentWorkspace();                                  // bookmark the whole workspace
   else if (k === 'k') Vault.togglePanel();
   else if (k === 'p') { try { p?.view.print(); } catch (e) { /* print may reject if the view isn't ready */ } }   // print the focused pane
   else if (k === '1') setLayout('cols', false);
@@ -782,19 +783,53 @@ document.getElementById('btn-downloads').addEventListener('click', () => toggleP
 document.getElementById('btn-settings').addEventListener('click', () => { fillSettings(); togglePanel(panelSet); });
 document.getElementById('open-dl-folder').addEventListener('click', () => api.openDownloads());
 
+// the current workspace as a saveable spec (same shape as a saved-session set)
+function currentWorkspaceSpec() {
+  if (cur) cur.activePane = activePane;
+  return {
+    name: cur.name || setName(cur, sets.indexOf(cur)),
+    layout: cur.layout,
+    theme: cur.theme || null,
+    panes: cur.panes.map((p) => p.tabs.map((t) => t.view.getURL()).filter((u) => /^(https?|file):/.test(u))).filter((a) => a.length)
+  };
+}
+async function bookmarkCurrentWorkspace() {
+  if (cur && cur.incognito) return;   // private workspaces are ephemeral -- don't write them to disk
+  await api.bookmarkWorkspace(currentWorkspaceSpec());
+  renderBookmarks(); panelBM.hidden = false;
+}
+function openWorkspaceBookmark(ws) {   // reopen a saved workspace as a NEW set
+  if (cur) cur.activePane = activePane;
+  const s = buildSet(ws.layout || 'cols', (ws.panes && ws.panes.length) ? ws.panes : [[SETTINGS.home]]);
+  s.name = ws.name || ''; s.theme = ws.theme || null;
+  switchSet(s); saveSession();
+}
 async function renderBookmarks() {
   const bms = await api.bookmarksGet();
   const list = document.getElementById('bm-list');
-  list.innerHTML = bms.length ? bms.map((b) =>
+  const wss = bms.filter((b) => b.type === 'workspace');
+  const urls = bms.filter((b) => b.type !== 'workspace');
+  const wsHtml = wss.map((b) => {
+    const n = (b.panes || []).length;
+    return `<div class="row"><a class="row-main" data-ws="${esc(b.id)}"><span class="row-t">&#9638; ${esc(b.name || 'Workspace')}</span><span class="row-u">${n} pane${n === 1 ? '' : 's'} · ${esc(b.layout || 'cols')}</span></a>` +
+      `<button class="row-x" data-key="${esc(b.id)}" title="Remove">&#215;</button></div>`;
+  }).join('');
+  const urlHtml = urls.map((b) =>
     `<div class="row"><a class="row-main" data-url="${b.url.replace(/"/g, '&quot;')}"><span class="row-t">${esc(b.title || b.url)}</span><span class="row-u">${esc(b.url)}</span></a>` +
-    `<button class="row-x" data-url="${b.url.replace(/"/g, '&quot;')}" title="Remove">&#215;</button></div>`).join('')
-    : '<p class="empty">No bookmarks yet — hit the &#9734; on any page (or Ctrl+D).</p>';
+    `<button class="row-x" data-key="${b.url.replace(/"/g, '&quot;')}" title="Remove">&#215;</button></div>`).join('');
+  list.innerHTML = (wsHtml + urlHtml) || '<p class="empty">No bookmarks yet — hit the &#9734; on any page, or Save workspace above.</p>';
 }
+document.getElementById('bm-add-ws').addEventListener('click', bookmarkCurrentWorkspace);
 document.getElementById('bm-list').addEventListener('click', async (e) => {
   const open = e.target.closest('.row-main');
   const rm = e.target.closest('.row-x');
-  if (open) { active()?.view.loadURL(open.dataset.url); panelBM.hidden = true; panes.forEach((p) => p.refreshStar()); }
-  else if (rm) { await api.bookmarkToggle({ url: rm.dataset.url }); renderBookmarks(); panes.forEach((p) => p.refreshStar()); }
+  if (rm) { await api.bookmarkRemove(rm.dataset.key); renderBookmarks(); panes.forEach((p) => p.refreshStar()); return; }
+  if (!open) return;
+  if (open.dataset.ws) {
+    const ws = (await api.bookmarksGet()).find((b) => b.id === open.dataset.ws);
+    if (ws) openWorkspaceBookmark(ws);
+    panelBM.hidden = true;
+  } else { active()?.view.loadURL(open.dataset.url); panelBM.hidden = true; panes.forEach((p) => p.refreshStar()); }
 });
 
 // downloads
