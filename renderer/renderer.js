@@ -838,8 +838,13 @@ panelSet.querySelectorAll('.danger').forEach((b) => b.addEventListener('click', 
   if (b.dataset.clear === 'bookmarks') { renderBookmarks(); panes.forEach((p) => p.refreshStar()); }
 }));
 
-// close panels when clicking into any pane (bubbles up to the sets root)
-gridRoot.addEventListener('mousedown', () => { document.querySelectorAll('.panel').forEach((p) => { p.hidden = true; }); }, true);
+// close any open footer panel when clicking ANYWHERE outside it -- but not when clicking inside a
+// panel, nor on a status-bar toggle button (whose own handler opens/closes it). Covers panes, the
+// bars, the address bar, everything.
+document.addEventListener('mousedown', (e) => {
+  if (e.target.closest('.panel') || e.target.closest('.sbtn')) return;
+  document.querySelectorAll('.panel').forEach((p) => { p.hidden = true; });
+}, true);
 
 // ---- boot: restore last session (v2 sets, or legacy flat), else the two demo panes ----
 SETTINGS = await api.settingsGet();
