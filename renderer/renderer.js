@@ -306,6 +306,7 @@ function addTab(pane, url) {
     else if (e.channel === 'vault:loginfocus') Vault.offerFill(pane, e.args[0]); // login field focused -> "prefill?"
     else if (e.channel === 'vault:loginblur') Vault.hideFill(pane);
     else if (e.channel === 'pane-active') { activePane = pane; markActive(); }   // clicked into this pane's content
+    else if (e.channel === 'zoom-wheel') { pane.setZoom(pane.zoom + ((e.args && e.args[0]) > 0 ? 0.1 : -0.1)); }   // Ctrl+scroll zoom
   });
   tfav.addEventListener('error', () => { tfav.hidden = true; });
 

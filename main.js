@@ -95,8 +95,11 @@ const SHORTCUTS = new Set(['t', 'w', 'l', 'r', 'f', 'm', 'd', 'k', 'p', '1', '2'
 function wireShortcuts(contents) {
   contents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown' || !(input.control || input.meta) || input.alt) return;
-    const k = (input.shift ? 'shift+' : '') + (input.key || '').toLowerCase();   // shift+n = new incognito
-    if (SHORTCUTS.has(k)) { event.preventDefault(); if (win) win.webContents.send('shortcut', k); }
+    const base = (input.key || '').toLowerCase();                 // the produced char, e.g. '+' for Shift+=
+    const combo = input.shift ? 'shift+' + base : base;
+    // prefer an explicit shift combo (shift+n, shift+d); else the base key so Ctrl++ (= Ctrl+Shift+=) still zooms
+    const k = SHORTCUTS.has(combo) ? combo : (SHORTCUTS.has(base) ? base : null);
+    if (k) { event.preventDefault(); if (win) win.webContents.send('shortcut', k); }
   });
 }
 
