@@ -102,7 +102,10 @@ login doesn't hand a third-party extension read/write access across every site y
   from the vault, matched by **host:port** (so localhost apps on different ports don't collide).
 - **Permission prompts** — native allow/deny for camera / mic / geolocation / notifications; everything else defaults to deny.
 - **Settings** — home page, search engine, clear history/bookmarks/session.
-- **Theme** — colour presets, one-click "looks", a photographic backdrop banner behind the chrome, dim slider, custom accent/image.
+- **Theme** — a per-workspace style dialog: one-click **looks**, 10 colour **presets**, **backdrop banners**
+  (7 photos + 4 gradients + your own image, downscaled on upload), **four colour pickers** (bg / bar /
+  accent / text), a dim/overlay slider, and **saved custom themes** ("My themes") you can name, delete,
+  and **export / import** as a short shareable code (with a safety filter that blocks remote-URL images).
 - All local: JSON in the app's userData. No server, no account, no sync, no telemetry.
 
 ## Password vault — Built

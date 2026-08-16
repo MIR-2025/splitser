@@ -9,6 +9,12 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 - **Per-tab colours.** Each tab shows a small colour dot auto-derived from its site (same site → same
   colour, so tabs group at a glance). Right-click a tab to override that site's colour with a swatch,
   or reset to Auto. Manual overrides persist (per host).
+- **Richer theme dialog (parity with the Split Screen extension).** Save, name, and delete **custom
+  themes** ("My themes"), including custom banners; **export/import** a theme as a short `SST1.` code
+  (remote-URL images filtered out); **4 gradient banners** (Dusk/Ember/Tide/Steel) alongside the photos;
+  **four colour pickers** (background / toolbar / accent / text) instead of accent-only; a live
+  ideal-image-size hint; a **Mono** look; and a **Remove image** button. Uploaded images are downscaled
+  to JPEG before storing so `localStorage` doesn't bloat.
 ### Fixed
 - **Linux install now launches from the desktop menu.** The `.deb`/`.rpm` always installs
   `chrome-sandbox` as setuid `4755` via a custom post-install script, so the app starts *with* its
