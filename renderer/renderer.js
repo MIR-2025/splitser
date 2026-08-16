@@ -1071,9 +1071,11 @@ async function fillSettings() {
   SETTINGS = await api.settingsGet();
   document.getElementById('set-home').value = SETTINGS.home;
   document.getElementById('set-search').value = SETTINGS.search;
+  document.getElementById('set-dlmode').value = SETTINGS.downloadMode || 'auto';
 }
 document.getElementById('set-home').addEventListener('change', async (e) => { SETTINGS = await api.settingsSet({ home: e.target.value.trim() }); });
 document.getElementById('set-search').addEventListener('change', async (e) => { SETTINGS = await api.settingsSet({ search: e.target.value.trim() }); });
+document.getElementById('set-dlmode').addEventListener('change', async (e) => { SETTINGS = await api.settingsSet({ downloadMode: e.target.value }); });
 panelSet.querySelectorAll('.danger').forEach((b) => b.addEventListener('click', async () => {
   await api.clearData(b.dataset.clear);
   if (b.dataset.clear === 'bookmarks') { renderBookmarks(); panes.forEach((p) => p.refreshStar()); }

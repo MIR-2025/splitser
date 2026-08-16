@@ -226,18 +226,28 @@ app.whenReady().then(() => {
     ses.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, onBeforeRequest);
     ses.on('will-download', (_e, item) => {
       const id = ++dlId;
+      const ask = (store.getSettings().downloadMode || 'auto') === 'ask';
       const name = path.basename(item.getFilename() || 'download');   // server-controlled -> basename only
-      let dest = path.join(dlDir, name);
-      if (fs.existsSync(dest)) {
-        const ext = path.extname(name), base = name.slice(0, name.length - ext.length);
-        let i = 1; do { dest = path.join(dlDir, base + ' (' + (i++) + ')' + ext); } while (fs.existsSync(dest));
+      let dest = '';
+      if (ask) {
+        // Don't set a save path -> Electron shows a native "Save As" dialog and the user picks the
+        // location. item.getSavePath() becomes valid once they choose (empty string if they cancel).
+      } else {
+        dest = path.join(dlDir, name);
+        if (fs.existsSync(dest)) {
+          const ext = path.extname(name), base = name.slice(0, name.length - ext.length);
+          let i = 1; do { dest = path.join(dlDir, base + ' (' + (i++) + ')' + ext); } while (fs.existsSync(dest));
+        }
+        item.setSavePath(dest);
+        dlPaths.add(dest);
       }
-      item.setSavePath(dest);
-      dlPaths.add(dest);
-      const finalName = path.basename(dest);
-      const emit = (state) => win && win.webContents.send('download-update', {
-        id, name: finalName, path: dest, received: item.getReceivedBytes(), total: item.getTotalBytes(), state
-      });
+      const emit = (state) => {
+        const p = item.getSavePath() || dest || '';
+        if (p) dlPaths.add(p);   // gate open/reveal to the real saved path (ask-mode path is chosen late)
+        win && win.webContents.send('download-update', {
+          id, name: p ? path.basename(p) : name, path: p, received: item.getReceivedBytes(), total: item.getTotalBytes(), state
+        });
+      };
       item.on('updated', (_ev, s) => emit(s));
       item.once('done', (_ev, s) => emit(s));
       emit('progressing');

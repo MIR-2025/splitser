@@ -4,6 +4,12 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 (`.deb` / `.rpm` / `.AppImage` / `.exe` / `.dmg`) are built per tag and are currently
 **unsigned** — and only the **Linux** build has actually been run (see REQUIREMENTS.md).
 
+## 0.1.9 — 2026-08-16
+### Added
+- **Download location choice.** Settings → **Downloads**: **Save to Downloads automatically** (the
+  default) or **Ask where to save each time (Save As…)**, which shows the native save dialog for each
+  download so you pick the folder and filename.
+
 ## 0.1.8 — 2026-08-15
 ### Added
 - **Per-tab colours.** Each tab shows a small colour dot auto-derived from its site (same site → same

@@ -108,7 +108,7 @@ export function getSession() { return session; }
 export function setSession(data) { session = (data && typeof data === 'object') ? data : []; saveSoon('session.json', session); }
 
 // ---- settings ----
-let settings = load('settings.json', { home: 'https://duckduckgo.com', search: 'https://duckduckgo.com/?q=%s' });
+let settings = load('settings.json', { home: 'https://duckduckgo.com', search: 'https://duckduckgo.com/?q=%s', downloadMode: 'auto' });
 export function getSettings() { return settings; }
 export function setSettings(patch) { settings = { ...settings, ...patch }; saveNow('settings.json', settings); return settings; }
 
