@@ -9,6 +9,13 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 - **Per-tab colours.** Each tab shows a small colour dot auto-derived from its site (same site → same
   colour, so tabs group at a glance). Right-click a tab to override that site's colour with a swatch,
   or reset to Auto. Manual overrides persist (per host).
+### Fixed
+- **Linux install now launches from the desktop menu.** The `.deb`/`.rpm` always installs
+  `chrome-sandbox` as setuid `4755` via a custom post-install script, so the app starts *with* its
+  sandbox even on Ubuntu 24.04 (`apparmor_restrict_unprivileged_userns=1`). electron-builder's default
+  heuristic (`unshare --user true`) mis-detected user namespaces there and left it at `0755`, so the
+  installed app aborted silently from the menu (`FATAL … chrome-sandbox … mode 4755`) and only the
+  `--no-sandbox` CLI worked.
 
 ## 0.1.7 — 2026-08-15
 ### Fixed
