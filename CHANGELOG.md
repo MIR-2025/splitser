@@ -2,7 +2,9 @@
 
 All notable changes to Splitser. Each version is a tagged CI release; installers
 (`.deb` / `.rpm` / `.AppImage` / `.exe` / `.dmg`) are built per tag and are currently
-**unsigned** — and only the **Linux** build has actually been run (see REQUIREMENTS.md).
+**unsigned** (expect a SmartScreen / Gatekeeper prompt). Which builds have actually been run on
+real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
+page on splitser.org tracks the per-release, per-artifact verification status.
 
 ## 0.1.10 — 2026-08-16
 ### Changed
