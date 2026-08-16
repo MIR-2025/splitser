@@ -4,6 +4,13 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 (`.deb` / `.rpm` / `.AppImage` / `.exe` / `.dmg`) are built per tag and are currently
 **unsigned** — and only the **Linux** build has actually been run (see REQUIREMENTS.md).
 
+## 0.1.10 — 2026-08-16
+### Changed
+- **Real app icon.** The packaged app now uses the official Splitser mark (rendered from
+  `splitser.org/public/icon.svg`) -- the blue/green tiled panes with the cyan `<>` gutter -- instead of
+  the plain placeholder, so the app/taskbar/dock icon matches the site and the Stripe checkout. The
+  Windows `.ico` and macOS `.icns` are generated from it at build time.
+
 ## 0.1.9 — 2026-08-16
 ### Added
 - **Download location choice.** Settings → **Downloads**: **Save to Downloads automatically** (the

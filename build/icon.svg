@@ -1,17 +1,95 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Splitser">
+  <title>Splitser</title>
+  <!--
+    Vector reconstruction of the Splitser / Split Screen mark, traced from
+    brave-ext/splitscreen/icons/icon128.png on 2026-08-13.
+    Two tiled panes (blue and green) split by a cyan gutter with a drag handle.
+    Only the window dots are mirrored between panes; the card, image, sun,
+    mountains and text lines keep the same left to right orientation in both,
+    matching the original.
+    NOTE: the icon.svg in the extension's own icons/ folder is a much older,
+    unrelated teal design. This file is the one that matches the shipped PNGs.
+  -->
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#12181d"/>
-      <stop offset="1" stop-color="#0b1013"/>
+    <linearGradient id="frame" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0"   stop-color="#3f8dfb"/>
+      <stop offset="0.5" stop-color="#33c2d7"/>
+      <stop offset="1"   stop-color="#49d68f"/>
     </linearGradient>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#6ee89a"/>
-      <stop offset="1" stop-color="#4ad07a"/>
+    <linearGradient id="frameShade" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"    stop-color="#000000" stop-opacity="0"/>
+      <stop offset="0.6"  stop-color="#000000" stop-opacity="0"/>
+      <stop offset="1"    stop-color="#00121c" stop-opacity="0.45"/>
     </linearGradient>
+
+    <linearGradient id="paneL" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#01122e"/><stop offset="1" stop-color="#000d26"/>
+    </linearGradient>
+    <linearGradient id="paneR" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#022b1c"/><stop offset="1" stop-color="#00190e"/>
+    </linearGradient>
+
+    <linearGradient id="cardL" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a6ad8"/><stop offset="1" stop-color="#012d86"/>
+    </linearGradient>
+    <linearGradient id="cardR" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#23b279"/><stop offset="1" stop-color="#05553a"/>
+    </linearGradient>
+
+    <linearGradient id="gutter" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"   stop-color="#2ad3e0"/>
+      <stop offset="0.4" stop-color="#31ecf6"/>
+      <stop offset="1"   stop-color="#06769b"/>
+    </linearGradient>
+
+    <!-- one screen aperture so the frame reads as a uniform ring -->
+    <clipPath id="screen"><rect x="4.5" y="4.5" width="119" height="119" rx="16"/></clipPath>
   </defs>
-  <rect x="0" y="0" width="1024" height="1024" rx="230" fill="url(#bg)"/>
-  <!-- tiling panes: one tall pane + two stacked panes -->
-  <rect x="180" y="180" width="280" height="664" rx="30" fill="url(#g)"/>
-  <rect x="500" y="180" width="344" height="312" rx="30" fill="url(#g)" opacity="0.92"/>
-  <rect x="500" y="532" width="344" height="312" rx="30" fill="url(#g)" opacity="0.80"/>
+
+  <rect x="0" y="0" width="128" height="128" rx="21" fill="url(#frame)"/>
+
+  <g clip-path="url(#screen)">
+    <rect x="4.5" y="4.5" width="57" height="119" fill="url(#paneL)"/>
+    <rect x="66.5" y="4.5" width="57" height="119" fill="url(#paneR)"/>
+
+    <!-- left pane: dots at the left -->
+    <g fill="#3d9dfa">
+      <circle cx="13" cy="12" r="2.6"/><circle cx="20" cy="12" r="2.6"/><circle cx="27" cy="12" r="2.6"/>
+    </g>
+    <rect x="11" y="26" width="44" height="52" rx="5" fill="url(#cardL)"/>
+    <rect x="15" y="31" width="36" height="6" rx="3" fill="#0e51bd" opacity=".85"/>
+    <rect x="15" y="41" width="36" height="33" rx="3" fill="#0d4dbb" opacity=".45"/>
+    <circle cx="38" cy="52" r="4.4" fill="#5aa3ff" opacity=".85"/>
+    <path d="M15 74 L25 56 L35 74 Z" fill="#01296f"/>
+    <path d="M29 74 L40 61 L51 74 Z" fill="#012a7d" opacity=".9"/>
+    <g fill="#0a49ac">
+      <rect x="15" y="90" width="34" height="3.6" rx="2"/>
+      <rect x="15" y="97" width="30" height="3.6" rx="2"/>
+      <rect x="15" y="104" width="20" height="3.6" rx="2"/>
+    </g>
+
+    <!-- right pane: dots at the right, everything else same orientation -->
+    <g fill="#3fd694">
+      <circle cx="115" cy="12" r="2.6"/><circle cx="108" cy="12" r="2.6"/><circle cx="101" cy="12" r="2.6"/>
+    </g>
+    <rect x="73" y="26" width="44" height="52" rx="5" fill="url(#cardR)"/>
+    <rect x="77" y="31" width="36" height="6" rx="3" fill="#0b7a52" opacity=".85"/>
+    <rect x="77" y="41" width="36" height="33" rx="3" fill="#0a7550" opacity=".45"/>
+    <circle cx="100" cy="52" r="4.4" fill="#68e0aa" opacity=".85"/>
+    <path d="M77 74 L87 56 L97 74 Z" fill="#01452f"/>
+    <path d="M91 74 L102 61 L113 74 Z" fill="#014a33" opacity=".9"/>
+    <g fill="#0c7d55">
+      <rect x="77" y="90" width="34" height="3.6" rx="2"/>
+      <rect x="77" y="97" width="30" height="3.6" rx="2"/>
+      <rect x="77" y="104" width="20" height="3.6" rx="2"/>
+    </g>
+
+    <rect x="61" y="0" width="6" height="128" fill="url(#gutter)"/>
+  </g>
+
+  <rect x="0" y="0" width="128" height="128" rx="21" fill="url(#frameShade)"/>
+
+  <circle cx="64" cy="64" r="8" fill="#1fc6d8" stroke="#0a4f74" stroke-width="1"/>
+  <path d="M61.8 61.2 L59.2 64 L61.8 66.8 M66.2 61.2 L68.8 64 L66.2 66.8"
+        fill="none" stroke="#04303f" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>
