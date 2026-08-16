@@ -157,6 +157,7 @@ ipcMain.handle('settings:set', (_e, patch) => store.setSettings(patch));
 ipcMain.handle('data:clear', (_e, kind) => store.clearData(kind));
 const dlPaths = new Set();   // full paths of files we've saved -- open/reveal is gated to these
 ipcMain.on('app:home', (e) => { e.returnValue = app.getPath('home'); });   // sync home dir for the sandboxed preload
+ipcMain.on('app:version', (e) => { e.returnValue = app.getVersion(); });   // sync app version for the About popover
 ipcMain.on('open-downloads', () => shell.openPath(app.getPath('downloads')));
 ipcMain.on('download:open', (_e, p) => { if (dlPaths.has(p)) shell.openPath(p); });
 ipcMain.on('download:reveal', (_e, p) => { if (dlPaths.has(p)) shell.showItemInFolder(p); });

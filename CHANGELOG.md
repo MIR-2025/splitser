@@ -9,6 +9,9 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 - **Per-tab colours.** Each tab shows a small colour dot auto-derived from its site (same site → same
   colour, so tabs group at a glance). Right-click a tab to override that site's colour with a swatch,
   or reset to Auto. Manual overrides persist (per host).
+- **About popover.** Click the "Splitser" label in the footer for the app name, **build version**
+  (`app.getVersion()`), a `splitser.org` link, and a **Support Splitser** donate button -- prepped but
+  disabled until `DONATE_URL` (a Stripe Payment Link or PayPal link) is set in `renderer/renderer.js`.
 - **Richer theme dialog (parity with the Split Screen extension).** Save, name, and delete **custom
   themes** ("My themes"), including custom banners; **export/import** a theme as a short `SST1.` code
   (remote-URL images filtered out); **4 gradient banners** (Dusk/Ember/Tide/Steel) alongside the photos;

@@ -860,6 +860,26 @@ function togglePanel(panel) {
 document.getElementById('btn-bookmarks').addEventListener('click', () => { renderBookmarks(); togglePanel(panelBM); });
 document.getElementById('btn-downloads').addEventListener('click', () => togglePanel(panelDL));
 document.getElementById('btn-settings').addEventListener('click', () => { fillSettings(); togglePanel(panelSet); });
+
+// ---- About popover: click the "Splitser" footer brand -> build version + (prepped) donate link ----
+// To turn on the Donate button, set DONATE_URL to a Stripe Payment Link (https://buy.stripe.com/…)
+// or a PayPal link (https://paypal.me/…). Empty = the button shows but stays disabled ("coming soon").
+const DONATE_URL = '';
+const panelAbout = document.getElementById('panel-about');
+function openUrlInSplitser(u) { const p = active() || panes[0]; if (p) { activePane = p; addTab(p, u); markActive(); } }
+function openAbout() {
+  const vEl = document.getElementById('about-version'); if (vEl) vEl.textContent = (api && api.version) || '?';
+  const don = document.getElementById('about-donate');
+  if (don) {
+    if (DONATE_URL) { don.disabled = false; don.title = 'Open the donation page'; don.onclick = () => { openUrlInSplitser(DONATE_URL); panelAbout.hidden = true; }; }
+    else { don.disabled = true; don.title = 'Donations coming soon'; }
+  }
+  const site = document.getElementById('about-site');
+  if (site) site.onclick = () => { openUrlInSplitser('https://splitser.org'); panelAbout.hidden = true; };
+  togglePanel(panelAbout);
+}
+infoEl.style.cursor = 'pointer'; infoEl.title = 'About Splitser';
+infoEl.addEventListener('click', openAbout);
 document.getElementById('open-dl-folder').addEventListener('click', () => api.openDownloads());
 
 // the current workspace as a saveable spec (same shape as a saved-session set)
