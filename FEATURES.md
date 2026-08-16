@@ -50,6 +50,9 @@ login doesn't hand a third-party extension read/write access across every site y
   tab closes its pane, the last pane closes its set. Each tab is a real live `<webview>`;
   background tabs stay alive (hidden, not destroyed), so audio keeps playing and state is
   preserved. Tabs restore with the session.
+- **Per-tab colours:** every tab shows a colour dot auto-derived from its site (same site → same
+  colour, so tabs group at a glance). Right-click a tab to override that site's colour with a swatch,
+  or reset to Auto; overrides persist.
 - Per-pane toolbar: back / forward / reload, favicon, address bar, bookmark star, split, close.
 - `target=_blank` / `window.open` opens a **new pane**, not an OS window.
 - **Roadmap:** free-form nested 2-D splits — splitting *any* pane into arbitrary rows/columns

@@ -4,6 +4,12 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 (`.deb` / `.rpm` / `.AppImage` / `.exe` / `.dmg`) are built per tag and are currently
 **unsigned** — and only the **Linux** build has actually been run (see REQUIREMENTS.md).
 
+## 0.1.8 — 2026-08-15
+### Added
+- **Per-tab colours.** Each tab shows a small colour dot auto-derived from its site (same site → same
+  colour, so tabs group at a glance). Right-click a tab to override that site's colour with a swatch,
+  or reset to Auto. Manual overrides persist (per host).
+
 ## 0.1.7 — 2026-08-15
 ### Fixed
 - **Raw text files are readable.** A plain-text document (`.txt`, logs, `SHA256SUMS`, any `text/plain`)

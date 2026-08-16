@@ -49,6 +49,22 @@ try { favOverrides = JSON.parse(localStorage.getItem('favicons') || '{}') || {};
 function favHost(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } }
 function favOv(host) { return host ? favOverrides[host] : null; }
 function saveFavs() { try { localStorage.setItem('favicons', JSON.stringify(favOverrides)); } catch (e) { /* ignore */ } }
+
+// ---- per-tab colours: an auto hue from the domain, with an optional manual per-host override ----
+let colorOverrides = {};
+try { colorOverrides = JSON.parse(localStorage.getItem('tabcolors') || '{}') || {}; } catch (e) { colorOverrides = {}; }
+const TAB_COLORS = ['#ef4444', '#f97316', '#f59e0b', '#22c55e', '#14b8a6', '#3b82f6', '#8b5cf6', '#ec4899', '#94a3b8'];
+function colorOv(host) { return host ? (colorOverrides[host] || null) : null; }
+function saveColors() { try { localStorage.setItem('tabcolors', JSON.stringify(colorOverrides)); } catch (e) { /* ignore */ } }
+function autoTabColor(host) {                      // deterministic hue -> same site, same colour, no config
+  if (!host) return '';
+  let h = 0; for (let i = 0; i < host.length; i++) h = (h * 31 + host.charCodeAt(i)) >>> 0;
+  return 'hsl(' + (h % 360) + ' 62% 60%)';
+}
+function tabColorFor(host) { return colorOv(host) || autoTabColor(host); }   // manual override wins over auto
+function resyncHostColors(host) {
+  for (const s of sets) for (const p of s.panes) for (const t of p.tabs) { if (favHost(t.url || (t.view && t.view.getURL())) === host && t.syncColor) t.syncColor(); }
+}
 const FAV_EMOJI = ['🖥️', '💻', '🧪', '⚙️', '🚀', '📦', '🔧', '🗄️', '🐘', '🐍', '⚡', '🌐', '📊', '🔒', '🎯', '🧩'];
 const FAV_COLORS = ['#5fe08a', '#5b9dff', '#c084fc', '#fb7185', '#fbbf24', '#2dd4bf', '#f97316', '#94a3b8'];
 function makeFav(spec, host) {   // render an emoji or a colour+initial to a 32px favicon data URL
@@ -84,6 +100,24 @@ function openFavPicker(pane) {
   pop.querySelectorAll('.fp-c').forEach((b) => { b.onclick = () => pick({ color: b.dataset.color }); });
   pop.querySelector('.fp-auto').onclick = () => pick(null);
   setTimeout(() => document.addEventListener('mousedown', function h(e) { if (!pop.contains(e.target) && e.target !== pane.fav) { closeFavPicker(); document.removeEventListener('mousedown', h); } }), 0);
+}
+function closeTabColorPicker() { document.querySelectorAll('.tabclr-picker').forEach((p) => p.remove()); }
+function openTabColorPicker(pane, tab, tabEl) {   // right-click a tab -> override its site's colour (or reset to auto)
+  closeTabColorPicker();
+  const host = favHost(tab.url || (tab.view && tab.view.getURL()) || ''); if (!host) return;
+  const cur = colorOv(host);
+  const pop = document.createElement('div'); pop.className = 'tabclr-picker';
+  pop.innerHTML = '<div class="fp-h">Colour for <b>' + esc(host) + '</b></div>' +
+    '<div class="fp-grid">' + TAB_COLORS.map((c) => '<button class="tcp-c' + (c === cur ? ' on' : '') + '" data-color="' + c + '" style="background:' + c + '"></button>').join('') + '</div>' +
+    '<button class="fp-auto">Auto (colour by site)</button>';
+  pane.el.appendChild(pop);
+  const br = tabEl.getBoundingClientRect(), pr = pane.el.getBoundingClientRect();
+  pop.style.left = Math.max(6, Math.min(br.left - pr.left, pane.el.clientWidth - pop.offsetWidth - 6)) + 'px';
+  pop.style.top = (br.bottom - pr.top + 4) + 'px';
+  const pick = (color) => { if (color) colorOverrides[host] = color; else delete colorOverrides[host]; saveColors(); resyncHostColors(host); closeTabColorPicker(); };
+  pop.querySelectorAll('.tcp-c').forEach((b) => { b.onclick = () => pick(b.dataset.color); });
+  pop.querySelector('.fp-auto').onclick = () => pick(null);
+  setTimeout(() => document.addEventListener('mousedown', function h(e) { if (!pop.contains(e.target)) { closeTabColorPicker(); document.removeEventListener('mousedown', h); } }), 0);
 }
 
 const BAR = `
@@ -220,6 +254,11 @@ function makePane(url, beforeEl = null, tabUrls = null) {
     if (closeBtn) { e.stopPropagation(); closeTab(pane, t); }
     else if (t !== pane.activeTab) { activePane = pane; switchTab(pane, t); }
   });
+  tabstrip.addEventListener('contextmenu', (e) => {   // right-click a tab -> pick a colour for its site
+    const tabEl = e.target.closest('.tab'); if (!tabEl) return;
+    e.preventDefault();
+    const t = pane.tabs.find((x) => x.tabEl === tabEl); if (t) openTabColorPicker(pane, t, tabEl);
+  });
 
   (tabUrls && tabUrls.length ? tabUrls : [url]).forEach((u) => addTab(pane, u));
   return pane;
@@ -306,18 +345,25 @@ function addTab(pane, url) {
 
   const tabEl = document.createElement('div');
   tabEl.className = 'tab';
-  tabEl.innerHTML = '<img class="tabfav" alt="" hidden /><span class="tabtitle">New tab</span><button class="tabclose" title="Close tab">&#215;</button>';
+  tabEl.innerHTML = '<i class="tabclr"></i><img class="tabfav" alt="" hidden /><span class="tabtitle">New tab</span><button class="tabclose" title="Close tab">&#215;</button>';
   pane.tabstrip.insertBefore(tabEl, pane.tabstrip.querySelector('.newtab'));
 
   const tab = { view, tabEl, title: 'New tab', favicon: '', realFavicon: '', url: url || '', zoom: 1, muted: false, loading: false, audio: false };
+  const tclr = tabEl.querySelector('.tabclr');
   const tfav = tabEl.querySelector('.tabfav');
   const ttitle = tabEl.querySelector('.tabtitle');
   const active = () => pane.activeTab === tab;
+  const syncColor = () => {   // per-tab colour dot: a manual per-host override, else an auto hue from the domain
+    const c = tabColorFor(favHost(tab.url || view.getURL()));
+    tclr.style.background = c || 'transparent'; tclr.hidden = !c;
+  };
+  tab.syncColor = syncColor;
   const syncFav = () => {   // a per-host custom icon (favOverrides) wins; else the page's own; else none
     const ov = favOv(favHost(tab.url || view.getURL()));
     tab.favicon = ov || tab.realFavicon || '';
     if (tab.favicon) { tfav.src = tab.favicon; tfav.hidden = false; } else { tfav.removeAttribute('src'); tfav.hidden = true; }
     if (active()) { setPaneFav(pane, tab.favicon); renderSetbar(); }
+    syncColor();
   };
   tab.syncFav = syncFav;
 
