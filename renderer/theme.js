@@ -18,7 +18,9 @@ const PRESETS = {                                   // colour-only (leave the ba
 };
 const BANNERS = {                                   // bundled photographic banners
   Sunset: 'banners/sunset.png', Ocean: 'banners/ocean.png', Twilight: 'banners/twilight.png',
-  Forest: 'banners/forest.png', Aurora: 'banners/aurora.png', America: 'banners/america.png'
+  Forest: 'banners/forest.png', Aurora: 'banners/aurora.png', America: 'banners/america.png',
+  Lake: 'banners/lake.webp', Prairie: 'banners/prairie3.webp', Stream: 'banners/stream.webp',
+  Waterfall: 'banners/waterfall.webp', Sundown: 'banners/sunset1.webp'
 };
 const BANNER_DEFS = {                               // zero-asset gradient banners (rendered to SVG data URLs)
   Dusk:  ['#2d1b4e', '#5b21b6', '#db2777'],

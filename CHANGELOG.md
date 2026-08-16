@@ -7,6 +7,9 @@ real hardware varies by release -- the Linux `.deb` is what's used here day to d
 page on splitser.org tracks the per-release, per-artifact verification status.
 
 ## 0.1.10 — 2026-08-16
+### Added
+- **5 more backdrop banners** — Lake, Prairie, Stream, Waterfall, Sundown (wide scenic header images),
+  added alongside the existing photos in the theme dialog's Backdrop row.
 ### Changed
 - **Real app icon.** The packaged app now uses the official Splitser mark (rendered from
   `splitser.org/public/icon.svg`) -- the blue/green tiled panes with the cyan `<>` gutter -- instead of
