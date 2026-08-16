@@ -65,7 +65,9 @@ login doesn't hand a third-party extension read/write access across every site y
   copy link, image open/copy/save, cut/copy/paste in fields, "Search for …", inspect element.
 - **Local files (`file://`):** paste a bare path (`/…`, `~/…`, `C:\…`) into the address bar and it
   opens as a local file. **Markdown** files render (themed, readable) with a Rendered/Raw toggle;
-  **PDFs** open inline in the built-in viewer. Local-file tabs restore with the session.
+  **plain-text** files (`.txt`, logs, `SHA256SUMS`, any `text/plain`) render themed instead of the
+  browser's unstyled white-on-white default; **PDFs** open inline in the built-in viewer. Local-file
+  tabs restore with the session.
 - **Vanilla Chrome User-Agent** — panes present as plain Chrome (no `Electron`/`Splitser` tokens),
   so sites like Google sign-in don't refuse them.
 - **Focus indicator** — an accent line marks the pane that has focus, and the **window title**
@@ -91,6 +93,8 @@ login doesn't hand a third-party extension read/write access across every site y
   relaunch; private workspaces are excluded.
 - **Downloads** — saved to the OS Downloads folder (server-set name is basename-only + collision-safe);
   a slide-in **toast** per download (progress → "Downloaded", with Open / Show-in-folder) plus a `↓` panel.
+  **Open** renders viewable files (md / text / pdf / images / html) **inside Splitser** in a new tab,
+  not the OS default app; other files (`.deb` / `.exe` / `.zip` / …) open with the OS.
 - **HTTP auth** — sites/dev servers behind Basic/Digest auth get an in-app sign-in dialog, prefilled
   from the vault, matched by **host:port** (so localhost apps on different ports don't collide).
 - **Permission prompts** — native allow/deny for camera / mic / geolocation / notifications; everything else defaults to deny.

@@ -273,6 +273,28 @@ function mdViewerInject() {
   let rendered = true;
   tog.onclick = () => { rendered = !rendered; v.style.display = rendered ? '' : 'none'; r.style.display = rendered ? 'none' : 'block'; tog.textContent = rendered ? 'View raw' : 'View rendered'; };
 }
+// Injected into a webview that loaded a raw text/plain document (a .txt, a log, SHA256SUMS, etc.):
+// the browser's built-in plain-text view uses its own stylesheet and comes out unreadable in a dark
+// context. Self-gates on contentType so it no-ops on real HTML/PDF/images. Colours match the .md viewer.
+function plainTextThemeInject() {
+  if (document.contentType !== 'text/plain') return;
+  if (window.__ptThemed) return; window.__ptThemed = true;
+  var st = document.createElement('style');
+  st.textContent = ':root{color-scheme:dark}html,body{background:#0e1418!important;margin:0!important}' +
+    'pre,body{color:#e7e3d6!important}' +
+    'pre{white-space:pre-wrap!important;word-wrap:break-word!important;padding:22px 26px!important;' +
+    'font:13px/1.6 ui-monospace,Menlo,Consolas,monospace!important;tab-size:4}';
+  (document.head || document.documentElement).appendChild(st);
+}
+// Open a finished download INSIDE Splitser (a new tab) for anything we can render; hand the rest to
+// the OS. Fixes "saved a .md, clicked Open, and it opened in Brave" -- renderable files stay in-app.
+function openDownloadedFile(path) {
+  if (/\.(md|markdown|txt|text|log|csv|tsv|json|xml|ya?ml|ini|conf|cfg|pdf|html?|png|jpe?g|gif|webp|bmp|svg|ico|avif)$/i.test(path)) {
+    const p = active() || panes[0];
+    if (p) { activePane = p; addTab(p, 'file://' + encodeURI(path)); markActive(); return; }
+  }
+  api.openDownload(path);   // .deb / .rpm / .exe / .zip / ... -> OS default app
+}
 // one tab = one live <webview>; background tabs stay alive (display:none, not destroyed)
 function addTab(pane, url) {
   const view = document.createElement('webview');
@@ -304,7 +326,8 @@ function addTab(pane, url) {
   view.addEventListener('dom-ready', () => { try { tab.wcId = view.getWebContentsId(); } catch (e) { /* not attached yet */ } if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); pane.refreshShield(); } });
   view.addEventListener('did-start-loading', () => { tab.loading = true; tabEl.classList.add('loading'); if (active()) pane.spin.hidden = false; });
   view.addEventListener('did-stop-loading', () => { tab.loading = false; tabEl.classList.remove('loading'); if (active()) { pane.spin.hidden = true; pane.syncAddr(); } const u = view.getURL(); if (/^https?:/.test(u) && !pane.incognito) api.historyAdd({ url: u, title: tab.title });
-    if (/^file:\/\/.*\.(md|markdown)(\?|#|$)/i.test(u)) view.executeJavaScript('(' + mdViewerInject.toString() + ')()').catch(() => {}); });   // render local markdown
+    if (/^file:\/\/.*\.(md|markdown)(\?|#|$)/i.test(u)) view.executeJavaScript('(' + mdViewerInject.toString() + ')()').catch(() => {});   // render local markdown
+    else if (/^file:\/\//i.test(u) || /\.(txt|text|log|csv|tsv|json|xml|ya?ml|ini|conf|cfg|md5|sha\d*sums?)(\?|#|$)/i.test(u)) view.executeJavaScript('(' + plainTextThemeInject.toString() + ')()').catch(() => {}); });   // make raw text/plain readable
   view.addEventListener('page-title-updated', (e) => { tab.title = e.title || tab.url; ttitle.textContent = tab.title; tabEl.title = tab.title; if (active()) updateTitle(); });
   view.addEventListener('page-favicon-updated', (e) => { const f = (e.favicons || [])[0]; if (f) tab.realFavicon = f; syncFav(); });
   view.addEventListener('update-target-url', (e) => { hoverEl.textContent = e.url || ''; });
@@ -971,7 +994,7 @@ function showDlToast(d) {
     (done || failed ? '' : '<div class="dlt-bar"><i style="width:' + pct + '%"></i></div>');
   el.querySelector('.dlt-x').onclick = () => el.remove();
   if (done) {
-    el.querySelector('[data-a="open"]').onclick = () => api.openDownload(d.path);
+    el.querySelector('[data-a="open"]').onclick = () => openDownloadedFile(d.path);
     el.querySelector('[data-a="folder"]').onclick = () => api.revealDownload(d.path);
   }
   if (done || failed) { clearTimeout(el._t); el._t = setTimeout(() => el.remove(), done ? 12000 : 8000); }

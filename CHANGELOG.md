@@ -4,6 +4,16 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 (`.deb` / `.rpm` / `.AppImage` / `.exe` / `.dmg`) are built per tag and are currently
 **unsigned** — and only the **Linux** build has actually been run (see REQUIREMENTS.md).
 
+## 0.1.7 — 2026-08-15
+### Fixed
+- **Raw text files are readable.** A plain-text document (`.txt`, logs, `SHA256SUMS`, any `text/plain`)
+  opened locally now renders in Splitser's dark theme instead of the browser's unstyled default, which
+  came out white-on-white. The `.md` viewer is unchanged.
+- **"Open" on a download stays in Splitser.** Clicking Open on a finished download now opens viewable
+  files (`.md`, `.txt`, `.pdf`, images, `.html`, …) in a new Splitser tab instead of handing them to the
+  OS default app (a saved `.md` was opening in Brave). Non-renderable files (`.deb` / `.exe` / `.zip` / …)
+  still open with the OS.
+
 ## 0.1.6 — 2026-08-15
 ### Added
 - **Bookmark folders** — organize saved pages *and* saved workspaces into named, collapsible
