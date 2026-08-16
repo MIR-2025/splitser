@@ -864,7 +864,7 @@ document.getElementById('btn-settings').addEventListener('click', () => { fillSe
 // ---- About popover: click the "Splitser" footer brand -> build version + (prepped) donate link ----
 // To turn on the Donate button, set DONATE_URL to a Stripe Payment Link (https://buy.stripe.com/…)
 // or a PayPal link (https://paypal.me/…). Empty = the button shows but stays disabled ("coming soon").
-const DONATE_URL = 'https://buy.stripe.com/cNi6oHdBw1AMfIJcBf9sk00';
+const DONATE_URL = 'https://buy.stripe.com/9B6aEZ5Q15HM9io4ZV8AE00';
 const panelAbout = document.getElementById('panel-about');
 function openUrlInSplitser(u) { const p = active() || panes[0]; if (p) { activePane = p; addTab(p, u); markActive(); } }
 function openAbout() {
