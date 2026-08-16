@@ -17,6 +17,9 @@ page on splitser.org tracks the per-release, per-artifact verification status.
   sizes (16–1024, from `build/icons/`) and refresh the icon cache on install, so the Applications ›
   Internet entry renders the logo instead of a generic placeholder. Before, only the 1024px icon was
   installed and no icon-cache refresh ran, so the menu couldn't find a usable size.
+### Removed
+- **Bubbles theme.** Removed the Bubbles look and its backdrop banner from the theme dialog. The
+  bundled image stays, so any saved theme or restored workspace still referencing it keeps working.
 
 ## 0.1.9 — 2026-08-16
 ### Added

@@ -18,7 +18,7 @@ const PRESETS = {                                   // colour-only (leave the ba
 };
 const BANNERS = {                                   // bundled photographic banners
   Sunset: 'banners/sunset.png', Ocean: 'banners/ocean.png', Twilight: 'banners/twilight.png',
-  Forest: 'banners/forest.png', Aurora: 'banners/aurora.png', America: 'banners/america.png', Bubbles: 'banners/bubbles.png'
+  Forest: 'banners/forest.png', Aurora: 'banners/aurora.png', America: 'banners/america.png'
 };
 const BANNER_DEFS = {                               // zero-asset gradient banners (rendered to SVG data URLs)
   Dusk:  ['#2d1b4e', '#5b21b6', '#db2777'],
@@ -27,7 +27,6 @@ const BANNER_DEFS = {                               // zero-asset gradient banne
   Steel: ['#0f172a', '#334155', '#64748b']
 };
 const LOOKS = {                                     // one-click: colours + a coordinated banner
-  Bubbles:  { bg: '#272027', bar: '#3a303a', accent: '#cf9be0', text: '#eae6ea', img: 'banners/bubbles.png' },
   Sunset:   { bg: '#1a0f0a', bar: '#2a1810', accent: '#f59e0b', text: '#fdf0e6', img: 'banners/sunset.png' },
   Ocean:    { bg: '#04141f', bar: '#0a2434', accent: '#22d3ee', text: '#e6f6fb', img: 'banners/ocean.png' },
   Twilight: { bg: '#14091f', bar: '#221033', accent: '#c084fc', text: '#f4eefc', img: 'banners/twilight.png' },
