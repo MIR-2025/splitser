@@ -10,6 +10,8 @@ page on splitser.org tracks the per-release, per-artifact verification status.
 ### Added
 - **5 more backdrop banners** — Lake, Prairie, Stream, Waterfall, Sundown (wide scenic header images),
   added alongside the existing photos in the theme dialog's Backdrop row.
+- **macOS Intel build.** CI now builds the `.dmg` for both **Apple Silicon (arm64)** and **Intel (x64)**,
+  so Intel Macs have a native download too.
 ### Changed
 - **Real app icon.** The packaged app now uses the official Splitser mark (rendered from
   `splitser.org/public/icon.svg`) -- the blue/green tiled panes with the cyan `<>` gutter -- instead of

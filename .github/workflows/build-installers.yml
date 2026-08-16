@@ -23,7 +23,7 @@ jobs:
             targets: --win nsis
             artifact: windows
           - os: macos-latest
-            targets: --mac dmg
+            targets: --mac dmg --arm64 --x64   # both Apple Silicon and Intel dmgs
             artifact: macos
     runs-on: ${{ matrix.os }}
     steps:
