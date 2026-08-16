@@ -112,6 +112,12 @@ let settings = load('settings.json', { home: 'https://duckduckgo.com', search: '
 export function getSettings() { return settings; }
 export function setSettings(patch) { settings = { ...settings, ...patch }; saveNow('settings.json', settings); return settings; }
 
+// ---- per-site download folders: in "remember" mode, a site's downloads reuse the folder you last
+// chose for that site (ask once, then auto-save there). { host: '/abs/dir' } ----
+let downloadDirs = load('download-dirs.json', {});
+export function getDownloadDir(host) { return host ? (downloadDirs[host] || '') : ''; }
+export function setDownloadDir(host, dir) { if (host && dir) { downloadDirs[host] = dir; saveNow('download-dirs.json', downloadDirs); } }
+
 // ---- vault: ciphertext blob only. Main NEVER sees the key, master password, or
 // plaintext -- all crypto happens in the isolated renderer. ----
 export function getVault() { return load('vault.enc', null); }

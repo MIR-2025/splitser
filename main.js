@@ -224,26 +224,32 @@ app.whenReady().then(() => {
   // every session -- the persistent one AND the ephemeral 'split-incognito' one that private workspaces use.
   function wireSession(ses) {
     ses.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, onBeforeRequest);
-    ses.on('will-download', (_e, item) => {
+    ses.on('will-download', (_e, item, wc) => {
       const id = ++dlId;
-      const ask = (store.getSettings().downloadMode || 'auto') === 'ask';
+      const mode = store.getSettings().downloadMode || 'auto';
       const name = path.basename(item.getFilename() || 'download');   // server-controlled -> basename only
+      const host = (() => { try { return new URL(wc.getURL()).hostname.replace(/^www\./, ''); } catch { return ''; } })();
+      const remembered = (mode === 'remember' && host) ? store.getDownloadDir(host) : '';
+      const collisionSafe = (dir) => {
+        let d = path.join(dir, name);
+        if (fs.existsSync(d)) { const ext = path.extname(name), base = name.slice(0, name.length - ext.length); let i = 1; do { d = path.join(dir, base + ' (' + (i++) + ')' + ext); } while (fs.existsSync(d)); }
+        return d;
+      };
       let dest = '';
-      if (ask) {
-        // Don't set a save path -> Electron shows a native "Save As" dialog and the user picks the
-        // location. item.getSavePath() becomes valid once they choose (empty string if they cancel).
+      // 'ask', or 'remember' with no folder yet for this site -> native Save As dialog (the chosen
+      // folder is recorded on completion, so the next download from this site reuses it). Otherwise
+      // auto-save: 'auto' -> Downloads; 'remember' with a known per-site folder -> that folder.
+      if (mode === 'ask' || (mode === 'remember' && !remembered)) {
+        // don't setSavePath -> Electron shows the Save As dialog
       } else {
-        dest = path.join(dlDir, name);
-        if (fs.existsSync(dest)) {
-          const ext = path.extname(name), base = name.slice(0, name.length - ext.length);
-          let i = 1; do { dest = path.join(dlDir, base + ' (' + (i++) + ')' + ext); } while (fs.existsSync(dest));
-        }
+        dest = collisionSafe(remembered || dlDir);
         item.setSavePath(dest);
         dlPaths.add(dest);
       }
       const emit = (state) => {
         const p = item.getSavePath() || dest || '';
-        if (p) dlPaths.add(p);   // gate open/reveal to the real saved path (ask-mode path is chosen late)
+        if (p) dlPaths.add(p);   // gate open/reveal to the real saved path (dialog path is chosen late)
+        if (state === 'completed' && mode === 'remember' && host && p) store.setDownloadDir(host, path.dirname(p));
         win && win.webContents.send('download-update', {
           id, name: p ? path.basename(p) : name, path: p, received: item.getReceivedBytes(), total: item.getTotalBytes(), state
         });

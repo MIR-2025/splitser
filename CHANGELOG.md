@@ -6,6 +6,12 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.11 — 2026-08-16
+### Added
+- **Remember a download folder per site.** A third Downloads mode in Settings: the first download
+  from a site asks where to save (native Save As…), then every later download from that same site
+  auto-saves to the folder you chose. Stored per host, so different sites can have different folders.
+
 ## 0.1.10 — 2026-08-16
 ### Added
 - **5 more backdrop banners** — Lake, Prairie, Stream, Waterfall, Sundown (wide scenic header images),
