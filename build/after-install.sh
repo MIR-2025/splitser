@@ -22,6 +22,8 @@ fi
 # from the desktop menu even where the namespace sandbox is blocked.
 chmod 4755 '/opt/Splitser/chrome-sandbox' || true
 
-# Refresh desktop / mime databases (mirrors electron-builder's default).
+# Refresh desktop / mime / icon databases (mirrors electron-builder's default, plus the icon cache
+# electron-builder omits -- without it the freshly installed app icon doesn't show in the menu).
 if hash update-mime-database 2>/dev/null; then update-mime-database /usr/share/mime || true; fi
 if hash update-desktop-database 2>/dev/null; then update-desktop-database /usr/share/applications || true; fi
+if hash gtk-update-icon-cache 2>/dev/null; then gtk-update-icon-cache -f -t /usr/share/icons/hicolor >/dev/null 2>&1 || true; fi

@@ -33,7 +33,7 @@
       "maintainer": "Richard Whitney <richard@whitneys.co>",
       "synopsis": "A tiling browser -- your logged-in apps, side by side",
       "description": "Splitser tiles real, logged-in websites side by side in resizable panes and grids, with named workspaces, per-workspace themes, a built-in password vault, and ad/tracker blocking.",
-      "icon": "build/icon.png"
+      "icon": "build/icons"
     },
     "deb": { "afterInstall": "build/after-install.sh" },
     "rpm": { "afterInstall": "build/after-install.sh" },

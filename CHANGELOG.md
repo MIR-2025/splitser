@@ -12,6 +12,11 @@ page on splitser.org tracks the per-release, per-artifact verification status.
   `splitser.org/public/icon.svg`) -- the blue/green tiled panes with the cyan `<>` gutter -- instead of
   the plain placeholder, so the app/taskbar/dock icon matches the site and the Stripe checkout. The
   Windows `.ico` and macOS `.icns` are generated from it at build time.
+### Fixed
+- **App icon shows in the Linux desktop menu.** The `.deb`/`.rpm` now ship the icon at all standard
+  sizes (16–1024, from `build/icons/`) and refresh the icon cache on install, so the Applications ›
+  Internet entry renders the logo instead of a generic placeholder. Before, only the 1024px icon was
+  installed and no icon-cache refresh ran, so the menu couldn't find a usable size.
 
 ## 0.1.9 — 2026-08-16
 ### Added
