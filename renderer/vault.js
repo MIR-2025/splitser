@@ -175,6 +175,20 @@ function credsForHost(host, port) {
 
 async function fill(view, entry) { armLock(); try { return await view.executeJavaScript(fillScript(entry.username, entry.password), true); } catch { return false; } }
 
+// suggest-a-password: fill EVERY visible password field on the page with the same generated value, so a
+// signup form's "password" + "confirm password" both get it and the form validates. Saving is not done
+// here -- the normal submit -> vault:capture -> offerSave path picks up the filled value and offers it.
+function fillPasswordScript(pass) {
+  return `(function(p){
+    function fire(el){['input','change','keyup','blur'].forEach(function(t){el.dispatchEvent(new Event(t,{bubbles:true}));});}
+    function nset(el,v){ try{var d=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value'); if(d&&d.set){d.set.call(el,v);return;}}catch(e){} el.value=v; }
+    var pws=[].slice.call(document.querySelectorAll('input[type=password]:not([disabled]):not([readonly])'));
+    pws.forEach(function(el){ try{el.focus();}catch(e){} nset(el,p); fire(el); });
+    return pws.length;
+  })(${JSON.stringify(pass)})`;
+}
+async function fillPassword(view, pass) { try { return await view.executeJavaScript(fillPasswordScript(pass), true); } catch { return 0; } }
+
 function refreshPaneKey(pane) {
   if (!pane.keyBtn) return;
   const on = unlocked() && matchesForUrl(pane.view.getURL()).length > 0;
@@ -226,6 +240,37 @@ function offerFill(pane, data) {
   let top = vb.offsetTop + r.y * z + 2;
   left = Math.max(6, Math.min(left, pane.el.clientWidth - box.offsetWidth - 6));
   if (top + box.offsetHeight > pane.el.clientHeight - 6) top = Math.max(vb.offsetTop + 6, vb.offsetTop + (r.y - r.h) * z - box.offsetHeight - 4);  // flip above
+  box.style.left = left + 'px';
+  box.style.top = top + 'px';
+}
+
+// offered when a NEW-password field is focused (signup / change-password). Shows one strong generated
+// password; clicking it fills every password field on the page. It then flows into the vault through the
+// normal submit -> capture -> offerSave path (so it's saved with the username the user types).
+function offerSuggest(pane, data) {
+  clearTimeout(fillTimer);
+  document.querySelectorAll('.vault-fill').forEach((b) => b.remove());
+  if (Date.now() < suppressFill) return;                          // we just filled (fill re-focuses the field)
+  const pw = generatePassword(20);
+  const box = document.createElement('div');
+  box.className = 'vault-fill vault-suggest';
+  box.innerHTML =
+    '<div class="vf-item vf-suggest"><span class="vf-k">&#127922;</span>' +          // 127922 = die
+    '<span class="vf-main"><b>Use a suggested password</b><span class="vf-sub vf-pw">' + esc(pw) + '</span></span></div>';
+  box.addEventListener('mousedown', async (ev) => {
+    ev.preventDefault(); suppressFill = Date.now() + 900;
+    await fillPassword(pane.view, pw); box.remove();
+    vToast(unlocked() ? 'Strong password filled -- Splitser will offer to save it when you submit'
+      : 'Strong password filled -- set up your vault to save it');
+  });
+  pane.el.appendChild(box);
+  // anchor under the field (rect is webview-viewport px; scale by the pane's zoom) -- same math as offerFill
+  const z = pane.activeTab ? (pane.activeTab.zoom || 1) : 1;
+  const vb = pane.viewsBox, r = (data && data.rect) || { x: 16, y: 80, w: 220, h: 20 };
+  let left = vb.offsetLeft + r.x * z;
+  let top = vb.offsetTop + r.y * z + 2;
+  left = Math.max(6, Math.min(left, pane.el.clientWidth - box.offsetWidth - 6));
+  if (top + box.offsetHeight > pane.el.clientHeight - 6) top = Math.max(vb.offsetTop + 6, vb.offsetTop + (r.y - r.h) * z - box.offsetHeight - 4);
   box.style.left = left + 'px';
   box.style.top = top + 'px';
 }
@@ -414,5 +459,5 @@ export const Vault = {
     bodyEl.addEventListener('mousedown', armLock, true);
     return load();
   },
-  refreshPaneKey, fillPane, unlocked, togglePanel, offerSave, offerFill, hideFill, credsForHost, onNextUnlock, openPanel
+  refreshPaneKey, fillPane, unlocked, togglePanel, offerSave, offerFill, offerSuggest, hideFill, credsForHost, onNextUnlock, openPanel
 };

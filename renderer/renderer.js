@@ -422,6 +422,7 @@ function addTab(pane, url) {
   view.addEventListener('ipc-message', (e) => {                               // signals from the webview preload
     if (e.channel === 'vault:capture') Vault.offerSave(pane, e.args[0]);       // login submitted -> "save this?"
     else if (e.channel === 'vault:loginfocus') Vault.offerFill(pane, e.args[0]); // login field focused -> "prefill?"
+    else if (e.channel === 'vault:newpw') Vault.offerSuggest(pane, e.args[0]);   // new-password field -> "suggest a strong one"
     else if (e.channel === 'vault:loginblur') Vault.hideFill(pane);
     else if (e.channel === 'pane-active') { activePane = pane; markActive(); }   // clicked into this pane's content
     else if (e.channel === 'zoom-wheel') { pane.setZoom(pane.zoom + ((e.args && e.args[0]) > 0 ? 0.1 : -0.1)); }   // Ctrl+scroll zoom

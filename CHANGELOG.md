@@ -6,6 +6,14 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.16 — 2026-08-17
+### Added
+- **Suggest a strong password on sign-up.** Focus a "create password" field (an `autocomplete=new-password`
+  field, or the password + confirm pair on a signup form) and Splitser offers one strong generated password;
+  clicking it fills both the password and confirm fields. It then flows into the vault the usual way -- when
+  you submit, Splitser offers to save it with the username you typed. Sign-IN password fields are unaffected
+  (they still offer saved logins).
+
 ## 0.1.15 — 2026-08-17
 ### Added
 - **Split shortcuts.** `Ctrl+Shift+E` opens a new pane **to the right** (lays the workspace out as

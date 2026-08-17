@@ -391,6 +391,8 @@ webview{ display:flex }
 .vf-main{ display:flex; flex-direction:column; min-width:0 }
 .vf-main b{ font-size:13px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .vf-sub{ font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.vf-pw{ font-family:ui-monospace,Menlo,Consolas,monospace; letter-spacing:.03em; color:var(--text) }
+.vf-suggest .vf-k{ font-size:15px }
 
 /* ================= theming: backdrop banner + theme panel ================= */
 /* One fixed strip painted behind the top chrome (set-bar + every pane's tab strip
