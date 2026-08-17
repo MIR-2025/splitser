@@ -294,7 +294,11 @@ function makePane(url, beforeEl = null, tabUrls = null) {
   };
   pane.openShields = () => { closeShieldsPop(); if (pane.shieldInfo === undefined) pane.refreshShield(); renderShieldsPop(pane); };
   pane.updateLock = () => {                          // secure/insecure badge for the active tab's URL
-    const st = siteSecurity(pane.view ? pane.view.getURL() : '');
+    // getURL() THROWS if the webview isn't attached + dom-ready yet (e.g. every pane during session
+    // restore). updateLock is called synchronously from switchTab, so an unguarded throw here aborts the
+    // whole restore loop and wipes the session. Never let it propagate.
+    let url = ''; try { url = pane.view ? pane.view.getURL() : ''; } catch (e) { url = ''; }
+    const st = siteSecurity(url);
     const b = pane.lockBtn; if (!b) return;
     if (!st) { b.hidden = true; b.classList.remove('secure', 'insecure'); return; }
     b.hidden = false;

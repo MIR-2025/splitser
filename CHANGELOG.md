@@ -6,7 +6,18 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
-## 0.1.17 — 2026-08-17
+## 0.1.18 — 2026-08-17
+### Fixed
+- **Workspaces no longer wiped on launch (critical regression in 0.1.17).** The 0.1.17 security badge added
+  `pane.updateLock()`, which read `webview.getURL()` **synchronously**. During session restore a pane's
+  webview isn't attached/dom-ready yet, so `getURL()` throws -- and because `updateLock` runs synchronously
+  inside `switchTab()`, that throw aborted the entire restore loop: no workspaces rebuilt, after which
+  `saveSession()` overwrote `session.json` with the empty state. `updateLock` now wraps `getURL()` in
+  try/catch, so a not-yet-ready webview can never break the restore. (The badge simply appears once the page
+  finishes loading, via `did-navigate`.) If 0.1.17 wiped your workspaces, restore `session.json` from a
+  backup **before** launching.
+
+## 0.1.17 — 2026-08-17 [YANKED — blank UI / wipes workspaces; do not use]
 ### Added
 - **Site security badge + certificate viewer.** The address bar now shows a lock badge on real remote
   sites: a green lock for HTTPS ("secure") or an amber warning for plain HTTP ("not secure"). Click it for
