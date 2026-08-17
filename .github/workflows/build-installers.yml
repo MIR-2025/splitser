@@ -22,9 +22,14 @@ jobs:
           - os: windows-latest
             targets: --win nsis
             artifact: windows
+          # Split the two Mac arches into separate jobs so each builds ONE dmg on its own runner --
+          # building both in one job races two dmg volumes and flakes on `hdiutil detach ... busy`.
           - os: macos-latest
-            targets: --mac dmg --arm64 --x64   # both Apple Silicon and Intel dmgs
-            artifact: macos
+            targets: --mac dmg --arm64
+            artifact: macos-arm64
+          - os: macos-latest
+            targets: --mac dmg --x64
+            artifact: macos-x64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -34,8 +39,16 @@ jobs:
       - name: Pin npm (avoid the broken npm@12 line)
         run: npm i -g npm@11
       - run: npm ci
-      - name: Build installers
-        run: npx electron-builder ${{ matrix.targets }} --publish never
+      - name: Build installers (retry -- macOS hdiutil detach is intermittently flaky)
+        shell: bash
+        run: |
+          n=0
+          until npx electron-builder ${{ matrix.targets }} --publish never; do
+            n=$((n+1)); if [ "$n" -ge 3 ]; then echo "build failed after $n attempts"; exit 1; fi
+            echo "::warning::build attempt $n failed; freeing any stuck Splitser dmg volume, retrying"
+            hdiutil detach -force /Volumes/Splitser* 2>/dev/null || true
+            sleep 15
+          done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/upload-artifact@v4
