@@ -14,7 +14,9 @@ nothing was exploited in the wild -- and none change how the app looks or works 
   quotes as well as `& < >`, so a server-chosen filename containing a `"` can no longer break out of the
   download toast's `title="…"` attribute. The separate "attribute-only" escaper was removed -- there is
   now exactly one escaper, and it is always attribute-safe, so the unsafe short-named one can't be
-  reached for by habit and regress this.
+  reached for by habit and regress this. The markdown viewer's own separate escaper (it builds link
+  `href`s and feeds `innerHTML`) was hardened the same way, and the CSP that blocks inline script -- the
+  backstop that keeps this Medium rather than Critical -- now carries a comment warning against relaxing it.
 - **A shared theme code can't smuggle in a remote image.** The imported-theme image filter now validates
   the *whole* data-URL (base64 raster only) rather than just its `data:image/` prefix. This closes a hole
   where a crafted `SST1.` code appended a second `url(https://…)` and quietly beaconed the recipient's IP

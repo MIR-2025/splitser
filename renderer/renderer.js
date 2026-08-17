@@ -294,7 +294,11 @@ function mdViewerInject() {
   const raw = pre ? pre.textContent : (document.body ? document.body.innerText : '');
   if (raw == null || !document.body) return;
   window.__mdRendered = true;
-  const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // Escapes quotes too, not just & < >: this renders markdown into document.documentElement.innerHTML,
+  // and inl() below builds <a href="URL"> from the link target AFTER esc runs -- so an unescaped " in a
+  // link URL would break out of the href attribute. This is a SEPARATE escaper from the top-level esc()
+  // (this function is stringified and injected, so it can't reference outer scope) -- review #1.
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const inl = (s) => s
     .replace(/`([^`]+)`/g, (_, c) => '<code>' + c + '</code>')
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')

@@ -2,6 +2,11 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <!-- SECURITY: do NOT add 'unsafe-inline' (or 'unsafe-eval') to script-src. There is deliberately no
+       script-src, so scripts fall back to default-src 'self' and inline script is BLOCKED. That block is
+       the backstop that keeps an attribute-injection bug (a crafted download filename, a shared theme
+       code) from escalating into arbitrary JS in this privileged frame -- which could read the vault.
+       Relaxing it re-arms security-review finding #1. -->
   <meta http-equiv="Content-Security-Policy"
         content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: http: data:" />
   <title>Splitser</title>
