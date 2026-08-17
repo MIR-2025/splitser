@@ -6,6 +6,13 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.12 — 2026-08-17
+### Fixed
+- **The About popover now toggles on the "Splitser" label.** Clicking the footer "Splitser" label a
+  second time closes the About flyout instead of flickering it shut-then-open — the global panel
+  outside-close (which fires on `mousedown`) was closing it just before the `click` could toggle it, so
+  it reopened. The brand label is now exempt from that handler, like the status-bar buttons are.
+
 ## 0.1.11 — 2026-08-16
 ### Added
 - **Remember a download folder per site.** A third Downloads mode in Settings: the first download

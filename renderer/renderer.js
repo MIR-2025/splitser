@@ -1105,7 +1105,7 @@ panelSet.querySelectorAll('.danger').forEach((b) => b.addEventListener('click', 
 // panel, nor on a status-bar toggle button (whose own handler opens/closes it). Covers panes, the
 // bars, the address bar, everything.
 document.addEventListener('mousedown', (e) => {
-  if (e.target.closest('.panel') || e.target.closest('.sbtn')) return;
+  if (e.target.closest('.panel') || e.target.closest('.sbtn') || e.target.closest('.brand')) return;   // .brand = the "Splitser" footer label toggles the About panel
   document.querySelectorAll('.panel').forEach((p) => { p.hidden = true; });
 }, true);
 
