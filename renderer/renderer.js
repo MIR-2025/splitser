@@ -675,6 +675,19 @@ function setLayout(mode, fill, save = true) {
   if (save) saveSession();
 }
 
+// Ctrl+Shift+E / Ctrl+Shift+O: add a pane and orient the set. "Right" lays the panes out as horizontal
+// columns (the new one sits to the right of the focused pane); "below" lays them out as a single vertical
+// stack (1 column x N rows, the new one at the bottom). setLayout(mode, false) rearranges without changing
+// the pane count. (True per-pane 2-D splits -- where only the focused pane splits -- are a separate feature.)
+function openPaneRight() {
+  const p = makePane(SETTINGS.home, active() ? active().el.nextElementSibling : null);
+  activePane = p; setLayout('cols', false); p.addr.focus();
+}
+function openPaneBelow() {
+  const p = makePane(SETTINGS.home, active() ? active().el.nextElementSibling : null);
+  activePane = p; setLayout('g1x' + panes.length, false); p.addr.focus();
+}
+
 // ---- sets / workspaces: each set is its own grid; only the current one is shown, the rest
 // stay in the DOM (display:none) so their webviews keep running. `cur` + the four mirrors are
 // the current set; switchSet() re-points them. ----
@@ -854,6 +867,8 @@ function handleShortcut(k) {
   else if (k === '1') setLayout('cols', false);
   else if (k === '2') setLayout('g2x2', true);
   else if (k === '3') setLayout('g3x3', true);
+  else if (k === 'shift+e') openPaneRight();                                             // new pane to the right (columns)
+  else if (k === 'shift+o') openPaneBelow();                                             // new pane below (vertical stack)
   else if (k === '=' || k === '+') { if (p) p.setZoom(p.zoom + 0.1); }
   else if (k === '-') { if (p) p.setZoom(p.zoom - 0.1); }
   else if (k === '0') p?.setZoom(1);

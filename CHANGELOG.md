@@ -6,6 +6,13 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.15 — 2026-08-17
+### Added
+- **Split shortcuts.** `Ctrl+Shift+E` opens a new pane **to the right** (lays the workspace out as
+  horizontal columns); `Ctrl+Shift+O` opens a new pane **below** (a vertical stack). Both land you in the
+  new pane's address bar. These orient the whole workspace -- horizontal vs vertical -- rather than
+  splitting only the focused pane; true per-pane 2-D splits remain on the roadmap.
+
 ## 0.1.14 — 2026-08-17
 ### Added
 - **A clear notice when a site needs DRM video.** Netflix, Disney+, Prime Video, Spotify and the like use
