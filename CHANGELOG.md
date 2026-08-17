@@ -6,6 +6,18 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.19 — 2026-08-17
+### Added
+- **Per-pane split tiling (Terminator-style).** `Ctrl+Shift+E` splits the focused pane to the **right**,
+  `Ctrl+Shift+O` splits it **below** -- the focused pane divides in two and the other panes stay put,
+  instead of re-orienting the whole workspace. Splits nest arbitrarily; **drag any boundary** to resize,
+  or grab the **round handle where two boundaries cross** to resize both axes at once. Split layouts
+  persist across restart and restore exactly. Panes never re-parent, so splitting never reloads a page.
+### Changed
+- **`Ctrl+Shift+E` / `Ctrl+Shift+O` now do per-pane directional splits** (in 0.1.15 they re-oriented the
+  entire workspace). The whole-workspace layouts are still available via the `Grid: C×R` picker, the 1+2
+  logo layout, and `Ctrl+1/2/3`; choosing one of those clears the split tree for that workspace.
+
 ## 0.1.18 — 2026-08-17
 ### Fixed
 - **Workspaces no longer wiped on launch (critical regression in 0.1.17).** The 0.1.17 security badge added
