@@ -73,6 +73,25 @@ function makeFav(spec, host) {   // render an emoji or a colour+initial to a 32p
   else { g.fillStyle = spec.color; if (g.roundRect) { g.beginPath(); g.roundRect(1, 1, 30, 30, 7); g.fill(); } else g.fillRect(1, 1, 30, 30); g.fillStyle = '#0b1013'; g.font = 'bold 18px system-ui'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText((host || '?').charAt(0).toUpperCase(), 16, 17); }
   return c.toDataURL('image/png');
 }
+function favFromFile(file) {   // downscale an uploaded image to a 64px square favicon data URL (cover-fit)
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onerror = () => reject(new Error('read'));
+    fr.onload = () => {
+      const im = new Image();
+      im.onerror = () => reject(new Error('decode'));
+      im.onload = () => {
+        const S = 64, c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d');
+        const s = Math.max(S / im.naturalWidth, S / im.naturalHeight);
+        const w = im.naturalWidth * s, h = im.naturalHeight * s;
+        g.drawImage(im, (S - w) / 2, (S - h) / 2, w, h);
+        resolve(c.toDataURL('image/png'));
+      };
+      im.src = String(fr.result);
+    };
+    fr.readAsDataURL(file);
+  });
+}
 function setPaneFav(pane, favicon) {
   if (favicon) { pane.fav.src = favicon; pane.fav.classList.remove('fav-empty'); }
   else { pane.fav.removeAttribute('src'); pane.fav.classList.add('fav-empty'); }
@@ -90,15 +109,18 @@ function openFavPicker(pane) {
   pop.innerHTML = '<div class="fp-h">Icon for <b>' + esc(host) + '</b></div>' +
     '<div class="fp-grid">' + FAV_EMOJI.map((e) => '<button class="fp-e" data-emoji="' + e + '">' + e + '</button>').join('') + '</div>' +
     '<div class="fp-grid">' + FAV_COLORS.map((c) => '<button class="fp-c" data-color="' + c + '" style="background:' + c + '"></button>').join('') + '</div>' +
+    '<label class="fp-upload">&#128247; Upload an image<input type="file" accept="image/*" hidden /></label>' +
     '<button class="fp-auto">Use the site’s own icon</button>';
   pane.el.appendChild(pop);
   const br = pane.fav.getBoundingClientRect(), pr = pane.el.getBoundingClientRect();
   pop.style.left = Math.max(6, Math.min(br.left - pr.left - 8, pane.el.clientWidth - pop.offsetWidth - 6)) + 'px';
   pop.style.top = (br.bottom - pr.top + 6) + 'px';
-  const pick = (spec) => { if (spec) favOverrides[host] = makeFav(spec, host); else delete favOverrides[host]; saveFavs(); resyncHostFavicons(host); closeFavPicker(); };
-  pop.querySelectorAll('.fp-e').forEach((b) => { b.onclick = () => pick({ emoji: b.dataset.emoji }); });
-  pop.querySelectorAll('.fp-c').forEach((b) => { b.onclick = () => pick({ color: b.dataset.color }); });
-  pop.querySelector('.fp-auto').onclick = () => pick(null);
+  const setFav = (url) => { favOverrides[host] = url; saveFavs(); resyncHostFavicons(host); closeFavPicker(); };
+  pop.querySelectorAll('.fp-e').forEach((b) => { b.onclick = () => setFav(makeFav({ emoji: b.dataset.emoji }, host)); });
+  pop.querySelectorAll('.fp-c').forEach((b) => { b.onclick = () => setFav(makeFav({ color: b.dataset.color }, host)); });
+  const up = pop.querySelector('.fp-upload input');
+  if (up) up.onchange = async (e) => { const f = e.target.files[0]; if (f) { try { setFav(await favFromFile(f)); } catch (err) { /* bad image */ } } };
+  pop.querySelector('.fp-auto').onclick = () => { delete favOverrides[host]; saveFavs(); resyncHostFavicons(host); closeFavPicker(); };
   setTimeout(() => document.addEventListener('mousedown', function h(e) { if (!pop.contains(e.target) && e.target !== pane.fav) { closeFavPicker(); document.removeEventListener('mousedown', h); } }), 0);
 }
 function closeTabColorPicker() { document.querySelectorAll('.tabclr-picker').forEach((p) => p.remove()); }

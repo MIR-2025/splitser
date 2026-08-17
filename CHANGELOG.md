@@ -11,6 +11,9 @@ page on splitser.org tracks the per-release, per-artifact verification status.
 - **Remember a download folder per site.** A third Downloads mode in Settings: the first download
   from a site asks where to save (native Save As…), then every later download from that same site
   auto-saves to the folder you chose. Stored per host, so different sites can have different folders.
+- **Custom favicon: upload an image.** The per-site favicon picker (click a pane's favicon) now
+  accepts an uploaded image — downscaled to a 64px icon — alongside the existing emoji and colour
+  options. Applies immediately to every tab on that host and persists.
 
 ## 0.1.10 — 2026-08-16
 ### Added
