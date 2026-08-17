@@ -847,8 +847,9 @@ function splitFocused(dir) {   // 'row' = new pane to the RIGHT of focused; 'col
 }
 // session persistence: self-contained (leaves carry their own tab URLs) so pane indices never matter and
 // old sessions (no `split` field) stay on the untouched legacy path.
+function tabUrlSafe(t) { try { return t.view.getURL(); } catch { return ''; } }   // getURL throws on a detaching/not-ready webview
 function serializeSplit(node) {
-  if (node.pane) return { tabs: node.pane.tabs.map((t) => t.view.getURL()).filter((u) => /^(https?|file):/.test(u)) };
+  if (node.pane) return { tabs: node.pane.tabs.map(tabUrlSafe).filter((u) => /^(https?|file):/.test(u)) };
   return { d: node.dir, r: node.ratio, a: serializeSplit(node.a), b: serializeSplit(node.b) };
 }
 function buildSplit(snode) {   // rebuild BOTH the tree and its panes from a serialized split (uses current-set mirrors)
@@ -1022,7 +1023,7 @@ function saveSession() {
           name: s.name || '',
           theme: s.theme || null,
           layout: s.layout,
-          panes: s.panes.map((p) => p.tabs.map((t) => t.view.getURL()).filter((u) => /^(https?|file):/.test(u))).filter((a) => a.length)
+          panes: s.panes.map((p) => p.tabs.map(tabUrlSafe).filter((u) => /^(https?|file):/.test(u))).filter((a) => a.length)
         };
         if (s.split) o.split = serializeSplit(s.split);   // per-pane split tree (self-contained). Flat `panes` stays as a safe fallback.
         return o;
