@@ -549,10 +549,15 @@ function closePane(pane) {
   const i = panes.indexOf(pane);
   panes.splice(i, 1); pane.el.remove();
   if (activePane === pane) activePane = panes[Math.min(i, panes.length - 1)] || null;
-  rebuildGutters(); updateTitle(); saveSession();
+  if (cur.split) {                                   // in a split tree: drop the leaf, collapse its parent
+    cur.split = st_removeLeaf(cur.split, pane);
+    if (cur.split) applySplitTree(cur); else setLayout('cols', false);
+  } else rebuildGutters();
+  updateTitle(); saveSession();
 }
 
 function rebuildGutters() {
+  if (currentLayout === 'splits') { if (cur && cur.split) applySplitTree(cur); return; }   // split-tree sets re-render themselves
   grid.querySelectorAll('.gutter').forEach((g) => g.remove());
   if (currentLayout === 'split12') { applySplit12(); return; }
   if (currentLayout !== 'cols') { applyGrid(currentLayout); return; }   // grids re-place + re-divide
@@ -715,6 +720,7 @@ function setPaneCount(n) {
 // layout: 'cols' (resizable columns, 1 row) | 'g{C}x{R}' (grid up to 3×3). `fill` sets the pane
 // count to the grid's cells. Operates on the CURRENT set. `save=false` while building sets at boot.
 function setLayout(mode, fill, save = true) {
+  if (cur) cur.split = null; if (grid) grid.classList.remove('smode');   // choosing a legacy layout clears any split tree
   currentLayout = mode; if (cur) cur.layout = mode;
   if (fill) { if (mode === 'split12') setPaneCount(3); else if (mode !== 'cols') { const [C, R] = gridDims(mode); setPaneCount(C * R); } }
   [...grid.classList].filter((c) => c === 'gmode').forEach((c) => grid.classList.remove(c));
@@ -732,18 +738,107 @@ function setLayout(mode, fill, save = true) {
   if (save) saveSession();
 }
 
+// ---- Per-pane directional splits (Terminator-style). A binary split tree per set (s.split; null = legacy
+// cols/grid). Rendered by computing each pane's CSS GRID AREA, so panes stay DIRECT children of .gridset and
+// never re-parent -- re-parenting a <webview> reloads its page (verified via spike), which we must avoid.
+// Node: leaf {pane} | split {dir:'row'|'col', ratio, a, b}. 'row' = side by side (new pane RIGHT); 'col' =
+// stacked (new pane BELOW). ----
+function st_replaceLeaf(node, pane, repl) {
+  if (node.pane) return node.pane === pane ? repl : node;
+  return { dir: node.dir, ratio: node.ratio, a: st_replaceLeaf(node.a, pane, repl), b: st_replaceLeaf(node.b, pane, repl) };
+}
+function st_removeLeaf(node, pane) {   // collapse: the sibling replaces the parent split; null only if node IS the leaf
+  if (node.pane) return node.pane === pane ? null : node;
+  const a = st_removeLeaf(node.a, pane); if (a === null) return node.b;
+  const b = st_removeLeaf(node.b, pane); if (b === null) return node.a;
+  return { dir: node.dir, ratio: node.ratio, a, b };
+}
+function st_rects(node, x0, y0, x1, y1, out, divs) {
+  if (node.pane) { out.push({ pane: node.pane, x0, y0, x1, y1 }); return; }
+  if (node.dir === 'row') { const xm = x0 + node.ratio * (x1 - x0);
+    if (divs) divs.push({ node, dir: 'row', pos: xm, x0, x1, y0, y1 });
+    st_rects(node.a, x0, y0, xm, y1, out, divs); st_rects(node.b, xm, y0, x1, y1, out, divs);
+  } else { const ym = y0 + node.ratio * (y1 - y0);
+    if (divs) divs.push({ node, dir: 'col', pos: ym, x0, x1, y0, y1 });
+    st_rects(node.a, x0, y0, x1, ym, out, divs); st_rects(node.b, x0, ym, x1, y1, out, divs);
+  }
+}
+function applySplitTree(s) {
+  const g = s.el;
+  g.querySelectorAll('.gutter, .gdiv, .splitdiv').forEach((x) => x.remove());
+  g.classList.remove('gmode'); g.classList.add('smode');
+  const rects = [], divs = []; st_rects(s.split, 0, 0, 1, 1, rects, divs);
+  const R = (v) => Math.round(v * 10000) / 10000;
+  const xs = [...new Set(rects.flatMap((r) => [R(r.x0), R(r.x1)]))].sort((a, b) => a - b);
+  const ys = [...new Set(rects.flatMap((r) => [R(r.y0), R(r.y1)]))].sort((a, b) => a - b);
+  g.style.gridTemplateColumns = xs.slice(1).map((x, i) => (x - xs[i]).toFixed(4) + 'fr').join(' ');
+  g.style.gridTemplateRows = ys.slice(1).map((y, i) => (y - ys[i]).toFixed(4) + 'fr').join(' ');
+  g.style.gap = '0'; g.style.gridAutoRows = '';
+  rects.forEach((r) => {
+    const el = r.pane.el;
+    el.style.flex = ''; el.style.minWidth = '0'; el.style.minHeight = '0';
+    el.style.gridColumn = (xs.indexOf(R(r.x0)) + 1) + ' / ' + (xs.indexOf(R(r.x1)) + 1);
+    el.style.gridRow = (ys.indexOf(R(r.y0)) + 1) + ' / ' + (ys.indexOf(R(r.y1)) + 1);
+  });
+  divs.forEach((d) => {                                // draggable handle at each split boundary
+    const el = document.createElement('div'); el.className = 'splitdiv ' + d.dir;
+    if (d.dir === 'row') { el.style.left = (d.pos * 100) + '%'; el.style.top = (d.y0 * 100) + '%'; el.style.height = ((d.y1 - d.y0) * 100) + '%'; }
+    else { el.style.top = (d.pos * 100) + '%'; el.style.left = (d.x0 * 100) + '%'; el.style.width = ((d.x1 - d.x0) * 100) + '%'; }
+    el.addEventListener('mousedown', (e) => startSplitDrag(e, s, d));
+    g.appendChild(el);
+  });
+  s.layout = 'splits'; if (s === cur) currentLayout = 'splits';
+  updateInfo();
+}
+function startSplitDrag(e, s, d) {
+  e.preventDefault();
+  const shield = document.createElement('div'); shield.className = 'drag-shield'; shield.style.cursor = d.dir === 'row' ? 'col-resize' : 'row-resize'; document.body.appendChild(shield);
+  const onMove = (ev) => {
+    const r = s.el.getBoundingClientRect();
+    if (d.dir === 'row') { const mx = (ev.clientX - r.left) / r.width; d.node.ratio = Math.max(0.05, Math.min(0.95, (mx - d.x0) / (d.x1 - d.x0))); }
+    else { const my = (ev.clientY - r.top) / r.height; d.node.ratio = Math.max(0.05, Math.min(0.95, (my - d.y0) / (d.y1 - d.y0))); }
+    applySplitTree(s);   // grid-area recompute -- panes don't reload
+  };
+  const onUp = () => { shield.remove(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); saveSession(); };
+  window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
+}
+function st_rowTree(ps) { return ps.length === 1 ? { pane: ps[0] } : { dir: 'row', ratio: 1 / ps.length, a: { pane: ps[0] }, b: st_rowTree(ps.slice(1)) }; }
+function st_colTree(ns) { return ns.length === 1 ? ns[0] : { dir: 'col', ratio: 1 / ns.length, a: ns[0], b: st_colTree(ns.slice(1)) }; }
+function legacyToTree(s) {   // build a tree matching the set's current legacy arrangement, so a split preserves it
+  const ps = s.panes;
+  if (ps.length === 1) return { pane: ps[0] };
+  if (s.layout === 'split12' && ps.length === 3) return { dir: 'row', ratio: 0.5, a: { pane: ps[0] }, b: { dir: 'col', ratio: 0.5, a: { pane: ps[1] }, b: { pane: ps[2] } } };
+  const gm = /^g(\d+)x(\d+)$/.exec(s.layout || '');
+  if (gm) { const C = +gm[1]; const rows = []; for (let i = 0; i < ps.length; i += C) rows.push(st_rowTree(ps.slice(i, i + C))); return st_colTree(rows); }
+  return st_rowTree(ps);   // cols (and anything else) -> a single row
+}
+function splitFocused(dir) {   // 'row' = new pane to the RIGHT of focused; 'col' = new pane BELOW
+  const p = active(); if (!p) return;
+  if (!cur.split) cur.split = legacyToTree(cur);
+  const np = makePane(SETTINGS.home);   // direct child of grid + pushed to panes[]; applySplitTree places it
+  cur.split = st_replaceLeaf(cur.split, p, { dir, ratio: 0.5, a: { pane: p }, b: { pane: np } });
+  activePane = np; applySplitTree(cur); markActive(); np.addr.focus(); saveSession();
+}
+// session persistence: self-contained (leaves carry their own tab URLs) so pane indices never matter and
+// old sessions (no `split` field) stay on the untouched legacy path.
+function serializeSplit(node) {
+  if (node.pane) return { tabs: node.pane.tabs.map((t) => t.view.getURL()).filter((u) => /^(https?|file):/.test(u)) };
+  return { d: node.dir, r: node.ratio, a: serializeSplit(node.a), b: serializeSplit(node.b) };
+}
+function buildSplit(snode) {   // rebuild BOTH the tree and its panes from a serialized split (uses current-set mirrors)
+  if (!snode) return null;
+  if (snode.tabs !== undefined) { const tabs = Array.isArray(snode.tabs) ? snode.tabs : []; return { pane: makePane(tabs[0] || SETTINGS.home, null, tabs.length ? tabs : null) }; }
+  const a = buildSplit(snode.a), b = buildSplit(snode.b);
+  if (!a || !b) return a || b;                          // tolerate a malformed half rather than throw
+  return { dir: snode.d === 'col' ? 'col' : 'row', ratio: (typeof snode.r === 'number' ? snode.r : 0.5), a, b };
+}
+
 // Ctrl+Shift+E / Ctrl+Shift+O: add a pane and orient the set. "Right" lays the panes out as horizontal
 // columns (the new one sits to the right of the focused pane); "below" lays them out as a single vertical
 // stack (1 column x N rows, the new one at the bottom). setLayout(mode, false) rearranges without changing
 // the pane count. (True per-pane 2-D splits -- where only the focused pane splits -- are a separate feature.)
-function openPaneRight() {
-  const p = makePane(SETTINGS.home, active() ? active().el.nextElementSibling : null);
-  activePane = p; setLayout('cols', false); p.addr.focus();
-}
-function openPaneBelow() {
-  const p = makePane(SETTINGS.home, active() ? active().el.nextElementSibling : null);
-  activePane = p; setLayout('g1x' + panes.length, false); p.addr.focus();
-}
+function openPaneRight() { splitFocused('row'); }   // Ctrl+Shift+E: new pane to the right of the focused pane
+function openPaneBelow() { splitFocused('col'); }   // Ctrl+Shift+O: new pane below the focused pane
 
 // ---- sets / workspaces: each set is its own grid; only the current one is shown, the rest
 // stay in the DOM (display:none) so their webviews keep running. `cur` + the four mirrors are
@@ -896,12 +991,16 @@ function saveSession() {
     const persist = sets.filter((s) => !s.incognito);   // private workspaces are ephemeral -- never saved
     const data = {
       v: 2, active: Math.max(0, persist.indexOf(cur)),   // cur incognito -> indexOf -1 -> 0
-      sets: persist.map((s) => ({
-        name: s.name || '',
-        theme: s.theme || null,
-        layout: s.layout,
-        panes: s.panes.map((p) => p.tabs.map((t) => t.view.getURL()).filter((u) => /^(https?|file):/.test(u))).filter((a) => a.length)
-      }))
+      sets: persist.map((s) => {
+        const o = {
+          name: s.name || '',
+          theme: s.theme || null,
+          layout: s.layout,
+          panes: s.panes.map((p) => p.tabs.map((t) => t.view.getURL()).filter((u) => /^(https?|file):/.test(u))).filter((a) => a.length)
+        };
+        if (s.split) o.split = serializeSplit(s.split);   // per-pane split tree (self-contained). Flat `panes` stays as a safe fallback.
+        return o;
+      })
     };
     api.sessionSet(data);
   }, 700);
@@ -1218,7 +1317,19 @@ document.addEventListener('mousedown', (e) => {
 SETTINGS = await api.settingsGet();
 const saved = await api.sessionGet();
 if (saved && saved.v === 2 && Array.isArray(saved.sets) && saved.sets.length) {
-  saved.sets.forEach((ss) => { const st = buildSet(ss.layout || 'cols', Array.isArray(ss.panes) ? ss.panes : []); st.name = ss.name || ''; st.theme = ss.theme || null; });
+  saved.sets.forEach((ss) => {
+    try {
+      if (ss.split) {                                   // a per-pane split set: rebuild panes FROM the tree
+        const st = createSet(); bindCur(st);
+        st.split = buildSplit(ss.split); st.name = ss.name || ''; st.theme = ss.theme || null;
+        if (st.split) { st.layout = 'splits'; applySplitTree(st); } else setLayout('cols', false, false);
+      } else {
+        const st = buildSet(ss.layout || 'cols', Array.isArray(ss.panes) ? ss.panes : []); st.name = ss.name || ''; st.theme = ss.theme || null;
+      }
+    } catch (e) {   // NEVER let one bad set abort the whole restore (that is what wiped 0.1.17's workspaces)
+      try { const st = buildSet(ss.layout || 'cols', (Array.isArray(ss.panes) && ss.panes.length) ? ss.panes : [[SETTINGS.home]]); st.name = ss.name || ''; st.theme = ss.theme || null; } catch (e2) { /* skip this set only */ }
+    }
+  });
   switchSet(sets[Math.min(saved.active || 0, sets.length - 1)]);
 } else if (Array.isArray(saved) && saved.length) {                 // legacy single-set session
   buildSet('cols', saved.map((e) => Array.isArray(e) ? e : [e]));
