@@ -14,6 +14,9 @@ page on splitser.org tracks the per-release, per-artifact verification status.
 - **Custom favicon: upload an image.** The per-site favicon picker (click a pane's favicon) now
   accepts an uploaded image — downscaled to a 64px icon — alongside the existing emoji and colour
   options. Applies immediately to every tab on that host and persists.
+### Changed
+- **Top-left logo** in the Workspaces bar is now the real Splitser mark (matching the app icon),
+  replacing the placeholder — still click it for the 1+2 layout. Workspace labels are now white.
 
 ## 0.1.10 — 2026-08-16
 ### Added

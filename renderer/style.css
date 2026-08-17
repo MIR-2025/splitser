@@ -28,7 +28,7 @@ body{
   border-radius:6px; border:1px solid var(--line); background:var(--field); color:var(--muted); cursor:pointer; font-size:12px; }
 .setpill:hover{ color:var(--text); border-color:var(--line-2); }
 .setpill.on{ background:var(--field-focus); color:var(--text); border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
-.setname{ max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.setname{ max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#fff; }
 .setname-edit{ height:18px; width:110px; background:var(--field); color:var(--text); border:1px solid var(--accent);
   border-radius:4px; padding:0 5px; font-size:12px; outline:none; }
 .setedit, .setclose{ display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px;

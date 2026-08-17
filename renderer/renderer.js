@@ -744,11 +744,9 @@ function setName(s, i) {   // a workspace's label: user-set name, else its first
   return h || ('Set ' + (i + 1));
 }
 // the split-pane brand mark, inlined so it needs no file/CSP round-trip; sits where the label was
-const LOGO_SVG = '<svg class="setbar-logo" viewBox="0 0 24 24" width="20" height="20" role="img" aria-label="Splitser -- the 1+2 layout"><title>Splitser -- click for the 1+2 layout</title>' +
-  '<rect width="24" height="24" rx="5.4" fill="#0e1418"/>' +
-  '<rect x="4.2" y="4.2" width="6.6" height="15.6" rx="1.2" fill="#5fe08a"/>' +
-  '<rect x="11.7" y="4.2" width="8.1" height="7.3" rx="1.2" fill="#5fe08a"/>' +
-  '<rect x="11.7" y="12.5" width="8.1" height="7.3" rx="1.2" fill="#5fe08a"/></svg>';
+// the real Splitser logo (bundled renderer/logo.svg -- same mark as the app icon), top-left of the
+// Workspaces bar; clicking it still applies the 1+2 layout.
+const LOGO_SVG = '<img class="setbar-logo" src="logo.svg" width="20" height="20" alt="Splitser" title="Splitser -- click for the 1+2 layout" />';
 function renderSetbar() {   // the "Workspaces" bar: named pills that wrap across rows (like the Split Screen ext)
   const pills = sets.map((s, i) => {
     const fav = s.panes.map((p) => p.activeTab && p.activeTab.favicon).find(Boolean);
