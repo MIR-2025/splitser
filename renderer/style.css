@@ -21,7 +21,9 @@ body{
 .splitdiv{ position:absolute; z-index:30; }
 .splitdiv.row{ width:6px; margin-left:-3px; cursor:col-resize; }
 .splitdiv.col{ height:6px; margin-top:-3px; cursor:row-resize; }
-.splitdiv:hover{ background:var(--accent); opacity:.6; }
+.splitdiv.xy{ width:16px; height:16px; margin:-8px 0 0 -8px; z-index:31; cursor:move; border-radius:50%; }
+.splitdiv.row:hover, .splitdiv.col:hover{ background:var(--accent); opacity:.6; }
+.splitdiv.xy:hover{ background:var(--accent); opacity:.5; }
 .gridset.gmode .pane{ min-width:0; }
 
 /* ---- set bar (workspaces): switch/close/add whole grids ---- */

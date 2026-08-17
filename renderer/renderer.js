@@ -787,6 +787,19 @@ function applySplitTree(s) {
     el.addEventListener('mousedown', (e) => startSplitDrag(e, s, d));
     g.appendChild(el);
   });
+  // diagonal handles: where a vertical (row) and horizontal (col) divider meet, drag resizes BOTH axes
+  const rowD = divs.filter((d) => d.dir === 'row'), colD = divs.filter((d) => d.dir === 'col'), seen = new Set();
+  rowD.forEach((rd) => colD.forEach((cd) => {
+    const x = rd.pos, y = cd.pos, E = 1e-4;
+    if (x < cd.x0 - E || x > cd.x1 + E || y < rd.y0 - E || y > rd.y1 + E) return;   // lines don't meet here
+    const kk = R(x) + ',' + R(y); if (seen.has(kk)) return; seen.add(kk);
+    const rowsAt = rowD.filter((d) => Math.abs(d.pos - x) < E && y >= d.y0 - E && y <= d.y1 + E);   // all verticals through the point
+    const colsAt = colD.filter((d) => Math.abs(d.pos - y) < E && x >= d.x0 - E && x <= d.x1 + E);   // all horizontals through the point
+    const el = document.createElement('div'); el.className = 'splitdiv xy';
+    el.style.left = (x * 100) + '%'; el.style.top = (y * 100) + '%';
+    el.addEventListener('mousedown', (e) => startSplitDragXY(e, s, rowsAt, colsAt));
+    g.appendChild(el);
+  }));
   s.layout = 'splits'; if (s === cur) currentLayout = 'splits';
   updateInfo();
 }
@@ -798,6 +811,19 @@ function startSplitDrag(e, s, d) {
     if (d.dir === 'row') { const mx = (ev.clientX - r.left) / r.width; d.node.ratio = Math.max(0.05, Math.min(0.95, (mx - d.x0) / (d.x1 - d.x0))); }
     else { const my = (ev.clientY - r.top) / r.height; d.node.ratio = Math.max(0.05, Math.min(0.95, (my - d.y0) / (d.y1 - d.y0))); }
     applySplitTree(s);   // grid-area recompute -- panes don't reload
+  };
+  const onUp = () => { shield.remove(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); saveSession(); };
+  window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
+}
+function startSplitDragXY(e, s, rows, cols) {   // drag an intersection -> resize both axes at once
+  e.preventDefault();
+  const shield = document.createElement('div'); shield.className = 'drag-shield'; shield.style.cursor = 'move'; document.body.appendChild(shield);
+  const onMove = (ev) => {
+    const r = s.el.getBoundingClientRect();
+    const mx = (ev.clientX - r.left) / r.width, my = (ev.clientY - r.top) / r.height;
+    rows.forEach((d) => { d.node.ratio = Math.max(0.05, Math.min(0.95, (mx - d.x0) / (d.x1 - d.x0))); });
+    cols.forEach((d) => { d.node.ratio = Math.max(0.05, Math.min(0.95, (my - d.y0) / (d.y1 - d.y0))); });
+    applySplitTree(s);
   };
   const onUp = () => { shield.remove(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); saveSession(); };
   window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
