@@ -720,7 +720,9 @@ function setPaneCount(n) {
 // layout: 'cols' (resizable columns, 1 row) | 'g{C}x{R}' (grid up to 3×3). `fill` sets the pane
 // count to the grid's cells. Operates on the CURRENT set. `save=false` while building sets at boot.
 function setLayout(mode, fill, save = true) {
-  if (cur) cur.split = null; if (grid) grid.classList.remove('smode');   // choosing a legacy layout clears any split tree
+  // choosing a legacy layout clears any split tree AND its overlay handles (else stray .splitdiv linger)
+  if (cur) cur.split = null;
+  if (grid) { grid.classList.remove('smode'); grid.querySelectorAll('.splitdiv').forEach((d) => d.remove()); }
   currentLayout = mode; if (cur) cur.layout = mode;
   if (fill) { if (mode === 'split12') setPaneCount(3); else if (mode !== 'cols') { const [C, R] = gridDims(mode); setPaneCount(C * R); } }
   [...grid.classList].filter((c) => c === 'gmode').forEach((c) => grid.classList.remove(c));
