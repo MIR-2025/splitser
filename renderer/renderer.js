@@ -222,6 +222,20 @@ function makePane(url, beforeEl = null, tabUrls = null) {
     clearTimeout(pane._zoomBadgeT);
     pane._zoomBadgeT = setTimeout(() => b.classList.remove('show'), 900);
   };
+  pane.showDrmNote = () => {                          // a page asked for a DRM CDM Splitser doesn't have
+    let n = pane._drmNote;
+    if (!n) {
+      n = document.createElement('div'); n.className = 'drm-note';
+      n.innerHTML = '<span>&#128274; This site needs DRM video (Netflix, Disney+, Spotify…) that Splitser can\'t play. Open it in your main browser.</span><button class="drm-note-x" title="Dismiss">&#215;</button>';
+      n.querySelector('.drm-note-x').addEventListener('click', () => { n.classList.remove('show'); if (pane.activeTab) pane.activeTab.drm = false; });
+      pane.viewsBox.appendChild(n); pane._drmNote = n;
+    }
+    n.classList.add('show');
+  };
+  pane.syncDrmNote = () => {                          // keep the notice tied to the active tab
+    if (pane.activeTab && pane.activeTab.drm) pane.showDrmNote();
+    else if (pane._drmNote) pane._drmNote.classList.remove('show');
+  };
   pane.toggleMute = () => { const t = pane.activeTab; if (!t) return; t.muted = !t.muted; pane.view.setAudioMuted(t.muted); muteBtn.hidden = false; muteBtn.innerHTML = t.muted ? '&#128263;' : '&#128266;'; };
   pane.updateShield = (info) => {
     pane.shieldInfo = info;
@@ -393,10 +407,10 @@ function addTab(pane, url) {
   };
   tab.syncFav = syncFav;
 
-  view.addEventListener('did-navigate', () => { tab.url = view.getURL(); tab.realFavicon = ''; syncFav(); if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); } saveSession(); });
+  view.addEventListener('did-navigate', () => { tab.url = view.getURL(); tab.realFavicon = ''; tab.drm = isDrmHost(tab.url); syncFav(); if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); pane.syncDrmNote(); } saveSession(); });
   view.addEventListener('did-navigate-in-page', () => { tab.url = view.getURL(); if (active()) pane.syncAddr(); });
   view.addEventListener('dom-ready', () => { try { tab.wcId = view.getWebContentsId(); } catch (e) { /* not attached yet */ } if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); pane.refreshShield(); } });
-  view.addEventListener('did-start-loading', () => { tab.loading = true; tabEl.classList.add('loading'); if (active()) pane.spin.hidden = false; });
+  view.addEventListener('did-start-loading', () => { tab.loading = true; tab.drm = false; tabEl.classList.add('loading'); if (active()) { pane.spin.hidden = false; pane.syncDrmNote(); } });
   view.addEventListener('did-stop-loading', () => { tab.loading = false; tabEl.classList.remove('loading'); if (active()) { pane.spin.hidden = true; pane.syncAddr(); } const u = view.getURL(); if (/^https?:/.test(u) && !pane.incognito) api.historyAdd({ url: u, title: tab.title });
     if (/^file:\/\/.*\.(md|markdown)(\?|#|$)/i.test(u)) view.executeJavaScript('(' + mdViewerInject.toString() + ')()').catch(() => {});   // render local markdown
     else if (/^file:\/\//i.test(u) || /\.(txt|text|log|csv|tsv|json|xml|ya?ml|ini|conf|cfg|md5|sha\d*sums?)(\?|#|$)/i.test(u)) view.executeJavaScript('(' + plainTextThemeInject.toString() + ')()').catch(() => {}); });   // make raw text/plain readable
@@ -430,7 +444,7 @@ function switchTab(pane, tab) {
   pane.spin.hidden = !tab.loading;
   pane.muteBtn.hidden = !(tab.muted || tab.audio); pane.muteBtn.innerHTML = tab.muted ? '&#128263;' : '&#128266;';
   pane.findbar.hidden = true; pane.findCount.textContent = '';
-  pane.refreshStar(); Vault.refreshPaneKey(pane); pane.refreshShield(); updateTitle();
+  pane.refreshStar(); Vault.refreshPaneKey(pane); pane.refreshShield(); pane.syncDrmNote(); updateTitle();
 }
 
 function closeTab(pane, tab) {
@@ -461,6 +475,14 @@ function hideSuggest(pane) { const b = pane.el.querySelector('.suggest'); b.hidd
 // content. There is deliberately only ONE escaper: a separate attribute-only variant is a footgun (the
 // unsafe one always ends up with the shorter name and gets reached for by habit -- security review #1).
 function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+// Dedicated streaming services whose video is DRM-only (Widevine / PlayReady), which vanilla Electron
+// can't decrypt. Flagged by host so a pane can explain why the video is blank (see pane.showDrmNote).
+const DRM_HOSTS = ['netflix.com', 'disneyplus.com', 'hulu.com', 'max.com', 'hbomax.com', 'primevideo.com', 'spotify.com', 'peacocktv.com', 'paramountplus.com', 'crunchyroll.com', 'tv.apple.com', 'music.apple.com', 'hotstar.com', 'starz.com', 'sling.com', 'fubo.tv'];
+function isDrmHost(u) {
+  let h; try { h = new URL(u).hostname.replace(/^www\./, '').toLowerCase(); } catch { return false; }
+  return DRM_HOSTS.some((d) => h === d || h.endsWith('.' + d));
+}
 
 function closePane(pane) {
   if (panes.length <= 1) {                         // closing the only pane of a set...

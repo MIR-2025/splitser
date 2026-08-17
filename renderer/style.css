@@ -283,6 +283,22 @@ webview{ display:flex }
 }
 .zoom-badge.show{opacity:1; transform:translate(-50%,0)}
 
+/* DRM-can't-play notice -- a dismissible bar along the bottom of the pane (no Widevine CDM in Electron) */
+.drm-note{
+  position:absolute; left:12px; right:12px; bottom:12px; z-index:46;
+  display:flex; align-items:center; gap:10px;
+  padding:10px 12px; border-radius:10px;
+  background:rgba(18,24,30,.96); color:#e7e3d6; border:1px solid var(--line-2);
+  font:13px/1.4 -apple-system,system-ui,Segoe UI,Roboto,sans-serif;
+  box-shadow:0 8px 24px rgba(0,0,0,.5);
+  opacity:0; pointer-events:none; transform:translateY(8px);
+  transition:opacity .14s ease, transform .14s ease;
+}
+.drm-note.show{opacity:1; pointer-events:auto; transform:translateY(0)}
+.drm-note span{flex:1 1 auto}
+.drm-note-x{flex:0 0 auto; background:transparent; color:#aab6c0; border:0; cursor:pointer; font-size:18px; line-height:1; padding:2px 6px; border-radius:6px}
+.drm-note-x:hover{color:#fff; background:rgba(255,255,255,.08)}
+
 .settings{display:flex; flex-direction:column; gap:12px; padding:10px 8px}
 .settings label{display:flex; flex-direction:column; gap:5px; font-size:12px; color:var(--muted)}
 .settings .hint{color:var(--line-2); font-size:11px}

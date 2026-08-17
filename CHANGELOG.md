@@ -6,6 +6,15 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.14 — 2026-08-17
+### Added
+- **A clear notice when a site needs DRM video.** Netflix, Disney+, Prime Video, Spotify and the like use
+  Widevine / PlayReady DRM, which vanilla Electron doesn't ship -- so they can't play in Splitser. Instead
+  of leaving you with only the service's cryptic error (Netflix's "M7701-1003"), Splitser now recognises
+  those services and shows a dismissible bar along the bottom of the pane: "This site needs DRM video …
+  that Splitser can't play. Open it in your main browser." Non-DRM video (YouTube, Twitch, most embedded
+  players) is unaffected.
+
 ## 0.1.13 — 2026-08-17
 ### Security
 Hardening from an authorised white-box security review (findings #1-#5). The fixes are defensive --
