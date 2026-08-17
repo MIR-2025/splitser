@@ -299,6 +299,22 @@ webview{ display:flex }
 .drm-note-x{flex:0 0 auto; background:transparent; color:#aab6c0; border:0; cursor:pointer; font-size:18px; line-height:1; padding:2px 6px; border-radius:6px}
 .drm-note-x:hover{color:#fff; background:rgba(255,255,255,.08)}
 
+/* address-bar security badge + certificate popover */
+.nav.lock{ font-size:12px; padding:0 3px; cursor:pointer }
+.nav.lock.secure{ color:#5fe08a }
+.nav.lock.insecure{ color:#f7b955 }
+.cert-pop{ position:absolute; z-index:50; min-width:240px; max-width:340px; background:var(--chrome); border:1px solid var(--line-2);
+  border-radius:10px; box-shadow:0 12px 30px rgba(0,0,0,.5); padding:12px 14px; font-size:12px; color:var(--text) }
+.cert-h{ font-weight:600; font-size:13px }
+.cert-pop.secure .cert-h{ color:#5fe08a }
+.cert-pop.insecure .cert-h{ color:#f7b955 }
+.cert-host{ color:var(--muted); margin:2px 0 10px; word-break:break-all }
+.cert-rows{ display:flex; flex-direction:column; gap:8px }
+.cert-row{ display:flex; flex-direction:column; gap:1px }
+.cert-k{ font-size:10px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted) }
+.cert-v{ color:var(--text); word-break:break-all; font-variant-numeric:tabular-nums }
+.cert-warn{ line-height:1.5 }
+
 .settings{display:flex; flex-direction:column; gap:12px; padding:10px 8px}
 .settings label{display:flex; flex-direction:column; gap:5px; font-size:12px; color:var(--muted)}
 .settings .hint{color:var(--line-2); font-size:11px}

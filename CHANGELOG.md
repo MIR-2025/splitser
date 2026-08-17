@@ -6,6 +6,15 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.17 — 2026-08-17
+### Added
+- **Site security badge + certificate viewer.** The address bar now shows a lock badge on real remote
+  sites: a green lock for HTTPS ("secure") or an amber warning for plain HTTP ("not secure"). Click it for
+  the connection status and, on HTTPS, the site's TLS certificate -- issued to, issued by, the validity
+  window, and the SHA-256 fingerprint. Nothing is shown for `file://`, `about:`, or localhost (which is
+  fine over http). The cert is observed during Chromium's own verification; Splitser never overrides the
+  trust decision, so a bad certificate is still blocked exactly as before.
+
 ## 0.1.16 — 2026-08-17
 ### Added
 - **Suggest a strong password on sign-up.** Focus a "create password" field (an `autocomplete=new-password`

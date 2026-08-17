@@ -155,6 +155,8 @@ ipcMain.on('session:set', (_e, urls) => store.setSession(urls));
 ipcMain.handle('settings:get', () => store.getSettings());
 ipcMain.handle('settings:set', (_e, patch) => store.setSettings(patch));
 ipcMain.handle('data:clear', (_e, kind) => store.clearData(kind));
+const certCache = new Map();   // hostname -> last-seen TLS cert summary, for the address-bar security badge
+ipcMain.handle('cert:get', (_e, host) => certCache.get((host || '').replace(/^www\./, '')) || null);
 const dlPaths = new Set();   // full paths of files we've saved -- open/reveal is gated to these
 ipcMain.on('app:home', (e) => { e.returnValue = app.getPath('home'); });   // sync home dir for the sandboxed preload
 ipcMain.on('app:version', (e) => { e.returnValue = app.getVersion(); });   // sync app version for the About popover
@@ -278,6 +280,19 @@ app.whenReady().then(() => {
       callback(response === 1);
     });
     ses.setPermissionCheckHandler((_wc, permission) => AUTO_ALLOW.has(permission));   // gates clipboard-read etc.
+    // Observe only: cache each host's leaf cert for the address-bar badge, then DEFER the trust decision
+    // to Chromium (cb(-3)) so this never weakens verification (a bad cert is still blocked as before).
+    ses.setCertificateVerifyProc((req, cb) => {
+      try {
+        const c = req.validatedCertificate || req.certificate;
+        if (req.hostname && c) certCache.set(req.hostname.replace(/^www\./, ''), {
+          subjectName: c.subjectName || '', issuerName: c.issuerName || '', serialNumber: c.serialNumber || '',
+          validStart: c.validStart || 0, validExpiry: c.validExpiry || 0, fingerprint: c.fingerprint || '',
+          ok: req.verificationResult === 'net::OK'
+        });
+      } catch (e) { /* ignore */ }
+      cb(-3);
+    });
   }
   wireSession(electronSession.fromPartition('persist:split'));
   wireSession(electronSession.fromPartition('split-incognito'));   // in-memory session for private workspaces

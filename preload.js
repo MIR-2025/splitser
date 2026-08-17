@@ -44,6 +44,7 @@ contextBridge.exposeInMainWorld('splitAPI', {
   settingsGet: () => ipcRenderer.invoke('settings:get'),
   settingsSet: (patch) => ipcRenderer.invoke('settings:set', patch),
   clearData: (kind) => ipcRenderer.invoke('data:clear', kind),
+  certGet: (host) => ipcRenderer.invoke('cert:get', host),        // last-seen TLS cert summary for the security badge
   openDownloads: () => ipcRenderer.send('open-downloads'),
   openDownload: (p) => ipcRenderer.send('download:open', p),      // open a finished download (main validates the path)
   revealDownload: (p) => ipcRenderer.send('download:reveal', p),  // show it in the OS file manager

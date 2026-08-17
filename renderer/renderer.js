@@ -142,11 +142,52 @@ function openTabColorPicker(pane, tab, tabEl) {   // right-click a tab -> overri
   setTimeout(() => document.addEventListener('mousedown', function h(e) { if (!pop.contains(e.target)) { closeTabColorPicker(); document.removeEventListener('mousedown', h); } }), 0);
 }
 
+// ---- address-bar security badge: "secure" (https) / "not secure" (http) for real remote sites; nothing
+// for file://, about:, or localhost (fine over http). Clicking it shows the site's TLS certificate. ----
+function siteSecurity(url) {
+  let u; try { u = new URL(url); } catch { return null; }
+  const host = u.hostname;
+  if (['file:', 'about:', 'data:', 'chrome:', 'blob:'].includes(u.protocol)) return null;
+  if (host === 'localhost' || /\.localhost$/i.test(host) || /^127\./.test(host) || host === '::1' || host === '[::1]' || host === '0.0.0.0') return null;
+  if (u.protocol === 'https:') return 'secure';
+  if (u.protocol === 'http:') return 'insecure';
+  return null;
+}
+function closeCertPop() { document.querySelectorAll('.cert-pop').forEach((p) => p.remove()); }
+async function openCertPopover(pane) {
+  closeCertPop();
+  const url = pane.view ? pane.view.getURL() : '';
+  const st = siteSecurity(url); if (!st) return;
+  const host = favHost(url);
+  const cert = st === 'secure' && api.certGet ? await api.certGet(host) : null;
+  const fmt = (s) => { try { return s ? new Date(s * 1000).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '?'; } catch { return '?'; } };
+  const expired = cert && cert.validExpiry && (cert.validExpiry * 1000 < Date.now());
+  const row = (k, v) => '<div class="cert-row"><span class="cert-k">' + k + '</span><span class="cert-v">' + esc(v || '?') + '</span></div>';
+  const body = st === 'insecure'
+    ? '<div class="cert-warn">This site uses <b>http://</b> -- the connection is <b>not encrypted</b>, so anything you send can be read or changed on the network. Avoid entering passwords or personal details.</div>'
+    : cert
+      ? '<div class="cert-rows">' +
+          row('Issued to', cert.subjectName) + row('Issued by', cert.issuerName) +
+          row('Valid', fmt(cert.validStart) + ' to ' + fmt(cert.validExpiry) + (expired ? '  (EXPIRED)' : '')) +
+          row('SHA-256', (cert.fingerprint || '').replace(/^sha256\//i, '')) +
+        '</div>'
+      : '<div class="cert-warn">Encrypted (HTTPS). Certificate details aren\'t cached yet -- reload the page to fetch them.</div>';
+  const pop = document.createElement('div'); pop.className = 'cert-pop ' + st;
+  pop.innerHTML = '<div class="cert-h">' + (st === 'secure' ? '&#128274; Secure connection' : '&#9888;&#65039; Not secure') + '</div>' +
+    '<div class="cert-host">' + esc(host) + '</div>' + body;
+  pane.el.appendChild(pop);
+  const br = pane.lockBtn.getBoundingClientRect(), pr = pane.el.getBoundingClientRect();
+  pop.style.left = Math.max(6, Math.min(br.left - pr.left - 8, pane.el.clientWidth - pop.offsetWidth - 6)) + 'px';
+  pop.style.top = (br.bottom - pr.top + 6) + 'px';
+  setTimeout(() => document.addEventListener('mousedown', function h(e) { if (!pop.contains(e.target) && e.target !== pane.lockBtn) { closeCertPop(); document.removeEventListener('mousedown', h); } }), 0);
+}
+
 const BAR = `
   <div class="bar">
     <button class="nav back" title="Back">&#8249;</button>
     <button class="nav fwd" title="Forward">&#8250;</button>
     <button class="nav reload" title="Reload">&#8635;</button>
+    <button class="nav lock" title="Site security" hidden></button>
     <img class="fav" alt="" hidden />
     <input class="addr" type="text" spellcheck="false" autocomplete="off" placeholder="Search or enter address" />
     <span class="spin" hidden></span>
@@ -182,6 +223,7 @@ function makePane(url, beforeEl = null, tabUrls = null) {
   const keyBtn = el.querySelector('.key');
   const muteBtn = el.querySelector('.mute');
   const shieldBtn = el.querySelector('.shield');
+  const lockBtn = el.querySelector('.lock');
   const suggest = el.querySelector('.suggest');
   const findbar = el.querySelector('.findbar');
   const findInput = el.querySelector('.find-input');
@@ -189,7 +231,7 @@ function makePane(url, beforeEl = null, tabUrls = null) {
   const tabstrip = el.querySelector('.tabstrip');
 
   const pane = {
-    el, addr, star, keyBtn, shieldBtn, tabstrip, fav, spin, muteBtn, findbar, findInput, findCount,
+    el, addr, star, keyBtn, shieldBtn, lockBtn, tabstrip, fav, spin, muteBtn, findbar, findInput, findCount,
     viewsBox: el.querySelector('.views'), tabs: [], activeTab: null, sugIdx: -1, sugs: [],
     get view() { return this.activeTab ? this.activeTab.view : null; },
     get title() { return this.activeTab ? this.activeTab.title : ''; },
@@ -251,6 +293,15 @@ function makePane(url, beforeEl = null, tabUrls = null) {
     pane.updateShield(await api.shieldsGet(t.wcId));
   };
   pane.openShields = () => { closeShieldsPop(); if (pane.shieldInfo === undefined) pane.refreshShield(); renderShieldsPop(pane); };
+  pane.updateLock = () => {                          // secure/insecure badge for the active tab's URL
+    const st = siteSecurity(pane.view ? pane.view.getURL() : '');
+    const b = pane.lockBtn; if (!b) return;
+    if (!st) { b.hidden = true; b.classList.remove('secure', 'insecure'); return; }
+    b.hidden = false;
+    b.classList.toggle('secure', st === 'secure'); b.classList.toggle('insecure', st === 'insecure');
+    b.innerHTML = st === 'secure' ? '&#128274;' : '&#9888;';
+    b.title = st === 'secure' ? 'Secure (HTTPS) -- click for the certificate' : 'Not secure -- no HTTPS. Click for details';
+  };
 
   // ---- toolbar handlers (all operate on the ACTIVE tab via pane.view) ----
   let sugTimer;
@@ -274,6 +325,7 @@ function makePane(url, beforeEl = null, tabUrls = null) {
   keyBtn.addEventListener('click', () => Vault.fillPane(pane));
   fav.addEventListener('click', (e) => { e.stopPropagation(); openFavPicker(pane); });   // set a custom icon (localhost etc.)
   shieldBtn.addEventListener('click', (e) => { e.stopPropagation(); pane.openShields(); });
+  lockBtn.addEventListener('click', (e) => { e.stopPropagation(); openCertPopover(pane); });
   muteBtn.addEventListener('click', pane.toggleMute);
   findInput.addEventListener('input', () => { if (!pane.view) return; if (findInput.value) pane.view.findInPage(findInput.value); else { pane.view.stopFindInPage('clearSelection'); findCount.textContent = ''; } });
   findInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); if (findInput.value && pane.view) pane.view.findInPage(findInput.value, { findNext: true, forward: !e.shiftKey }); } else if (e.key === 'Escape') { e.preventDefault(); pane.closeFind(); } });
@@ -407,7 +459,7 @@ function addTab(pane, url) {
   };
   tab.syncFav = syncFav;
 
-  view.addEventListener('did-navigate', () => { tab.url = view.getURL(); tab.realFavicon = ''; tab.drm = isDrmHost(tab.url); syncFav(); if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); pane.syncDrmNote(); } saveSession(); });
+  view.addEventListener('did-navigate', () => { tab.url = view.getURL(); tab.realFavicon = ''; tab.drm = isDrmHost(tab.url); syncFav(); if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); pane.syncDrmNote(); pane.updateLock(); } saveSession(); });
   view.addEventListener('did-navigate-in-page', () => { tab.url = view.getURL(); if (active()) pane.syncAddr(); });
   view.addEventListener('dom-ready', () => { try { tab.wcId = view.getWebContentsId(); } catch (e) { /* not attached yet */ } if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); pane.refreshShield(); } });
   view.addEventListener('did-start-loading', () => { tab.loading = true; tab.drm = false; tabEl.classList.add('loading'); if (active()) { pane.spin.hidden = false; pane.syncDrmNote(); } });
@@ -445,7 +497,7 @@ function switchTab(pane, tab) {
   pane.spin.hidden = !tab.loading;
   pane.muteBtn.hidden = !(tab.muted || tab.audio); pane.muteBtn.innerHTML = tab.muted ? '&#128263;' : '&#128266;';
   pane.findbar.hidden = true; pane.findCount.textContent = '';
-  pane.refreshStar(); Vault.refreshPaneKey(pane); pane.refreshShield(); pane.syncDrmNote(); updateTitle();
+  pane.refreshStar(); Vault.refreshPaneKey(pane); pane.refreshShield(); pane.syncDrmNote(); pane.updateLock(); updateTitle();
 }
 
 function closeTab(pane, tab) {
