@@ -190,12 +190,21 @@ ipcMain.handle('shields:toggleAll', () => { shieldsOn = !shieldsOn; persistShiel
 
 // ---- HTTP Basic/Digest auth: forward the challenge to an in-app dialog, then answer it ----
 const pendingAuth = new Map();
+const mainNavOrigin = new Map();                 // webContents.id -> origin of its last top-level navigation
 let authId = 0;
-app.on('login', (event, _contents, details, authInfo, callback) => {
-  event.preventDefault();                       // we'll answer via the renderer dialog
+app.on('login', (event, webContents, details, authInfo, callback) => {
+  event.preventDefault();                        // we'll answer via the renderer dialog (or auto-decline)
+  const reqUrl = details.url || '';
+  // Only surface a credential prompt for auth that belongs to a top-level navigation the user drove.
+  // A 401 on a cross-origin SUBRESOURCE (e.g. a hostile page's <img src="https://intranet/secret">) is
+  // silently declined -- otherwise the page conjures a prompt, prefilled from the vault, for an origin
+  // the user never chose to visit. Proxy auth has no page origin, so it is always allowed (review #3).
+  let reqOrigin = ''; try { reqOrigin = new URL(reqUrl).origin; } catch { /* opaque */ }
+  const navOrigin = webContents ? mainNavOrigin.get(webContents.id) : '';
+  if (!authInfo.isProxy && (!navOrigin || navOrigin !== reqOrigin)) { callback(); return; }   // decline -> 401
   const id = ++authId;
   pendingAuth.set(id, callback);
-  win && win.webContents.send('http-auth', { id, host: authInfo.host, port: authInfo.port, realm: authInfo.realm || '', isProxy: !!authInfo.isProxy, url: details.url || '' });
+  win && win.webContents.send('http-auth', { id, host: authInfo.host, port: authInfo.port, realm: authInfo.realm || '', isProxy: !!authInfo.isProxy, url: reqUrl });
 });
 ipcMain.on('http-auth-reply', (_e, { id, username, password }) => {
   const cb = pendingAuth.get(id); if (!cb) return;
@@ -280,8 +289,11 @@ app.whenReady().then(() => {
       if (win && /^(https?:|about:)/.test(url)) win.webContents.send('open-pane', url);
       return { action: 'deny' };
     });
-    contents.on('did-start-navigation', (_ev, _u, isInPlace, isMainFrame) => {   // new page -> reset its block count
-      if (isMainFrame && !isInPlace) { blocked.set(contents.id, 0); pushShields(contents.id); }
+    contents.on('did-start-navigation', (_ev, url, isInPlace, isMainFrame) => {   // new page -> reset its block count
+      if (isMainFrame && !isInPlace) {
+        blocked.set(contents.id, 0); pushShields(contents.id);
+        try { mainNavOrigin.set(contents.id, new URL(url).origin); } catch { mainNavOrigin.delete(contents.id); }   // remember the top-level origin for the HTTP-auth main-frame check
+      }
     });
     contents.on('context-menu', (_ev, p) => buildContextMenu(contents, p).popup({ window: win }));
     wireShortcuts(contents);

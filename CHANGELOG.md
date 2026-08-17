@@ -6,6 +6,30 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.13 — 2026-08-17
+### Security
+Hardening from an authorised white-box security review (findings #1-#5). The fixes are defensive --
+nothing was exploited in the wild -- and none change how the app looks or works day to day.
+- **A download filename can't inject markup into the app frame.** The single HTML escaper now escapes
+  quotes as well as `& < >`, so a server-chosen filename containing a `"` can no longer break out of the
+  download toast's `title="…"` attribute. The separate "attribute-only" escaper was removed -- there is
+  now exactly one escaper, and it is always attribute-safe, so the unsafe short-named one can't be
+  reached for by habit and regress this.
+- **A shared theme code can't smuggle in a remote image.** The imported-theme image filter now validates
+  the *whole* data-URL (base64 raster only) rather than just its `data:image/` prefix. This closes a hole
+  where a crafted `SST1.` code appended a second `url(https://…)` and quietly beaconed the recipient's IP
+  (and user-agent) to a third party every time the theme painted.
+- **HTTP-auth prompts only appear for the page you actually navigated to.** A 401 from a cross-origin
+  *subresource* (e.g. a hostile page embedding `<img src="https://intranet/secret">`) is now silently
+  declined instead of popping a sign-in box. When a prompt does appear it names the full origin
+  (scheme + host), and vault prefill requires an exact `host:port` match -- it no longer offers a
+  domain-wide saved password on a prompt the user didn't initiate.
+- **Saved passwords respect the scheme.** An https-saved credential is no longer offered on a plaintext
+  `http://` page of the same host, so a downgraded or impostor page on a hostile network can't light the
+  key icon and put the real password one click away.
+- **The vault key-derivation has a floor.** The PBKDF2 iteration count read from the vault file is clamped
+  to at least 600,000, so a tampered file can't ask for a weaker derivation.
+
 ## 0.1.12 — 2026-08-17
 ### Fixed
 - **The About popover now toggles on the "Splitser" label.** Clicking the footer "Splitser" label a

@@ -127,7 +127,7 @@ async function persist() { if (!key) return; const c = await encryptObj(key, ent
 async function load() {
   const blob = await api.vaultGet();
   hasVault = !!blob;
-  if (blob) { salt = ub64(blob.salt); iter = blob.iter || ITER; }
+  if (blob) { salt = ub64(blob.salt); iter = Math.max(ITER, Number(blob.iter) || ITER); }   // never trust a stored iter below our floor (review #5)
   render();
 }
 
@@ -138,7 +138,7 @@ async function create(master) {
 }
 async function unlock(master) {
   const blob = await api.vaultGet(); if (!blob) return false;
-  salt = ub64(blob.salt); iter = blob.iter || ITER;
+  salt = ub64(blob.salt); iter = Math.max(ITER, Number(blob.iter) || ITER);   // never trust a stored iter below our floor (review #5)
   const k = await deriveKey(master, salt, iter);
   try { entries = await decryptObj(k, blob.iv, blob.data); } catch { return false; }  // GCM auth fail = wrong password
   key = k; armLock(); render(); refreshAllKeys();
@@ -150,7 +150,14 @@ function lock() { key = null; entries = []; clearTimeout(lockTimer); render(); r
 
 function matchesForUrl(url) {
   const h = hostOf(url); if (!h) return [];
-  return entries.filter((e) => hostMatch(h, hostOf(e.url)));
+  let scheme = ''; try { scheme = new URL(url).protocol; } catch { /* bare host, treat as unknown scheme */ }
+  return entries.filter((e) => {
+    if (!hostMatch(h, hostOf(e.url))) return false;
+    // Never offer an https-saved credential on a plaintext http page. On a hostile network a downgraded
+    // or impostor page shouldn't get the key icon lit and the real password one click away (review #4).
+    if (scheme === 'http:' && /^https:/i.test(e.origin || e.url || '')) return false;
+    return true;
+  });
 }
 // credentials for a host (+ optional port) -- prefills the HTTP-auth dialog. Prefers an entry whose
 // URL authority (host:port) matches exactly, so localhost:26613 and localhost:26702 don't collide;
@@ -159,8 +166,10 @@ function authorityOf(u) { try { return new URL(u).host; } catch { return ''; } }
 function credsForHost(host, port) {
   if (!unlocked() || !host) return null;
   const wantAuth = (port && port !== 80 && port !== 443) ? host + ':' + port : host;
-  let m = entries.find((e) => authorityOf(e.url) === wantAuth);        // exact host:port
-  if (!m) m = entries.find((e) => hostMatch(host, hostOf(e.url)));     // else same registrable domain
+  // Exact authority (host:port) match ONLY. An HTTP-auth prompt is not user-initiated the way a login
+  // form is, so we never fall back to a registrable-domain match here: getting a.example.com's saved
+  // password typed into a prompt claiming to be b.example.com is exactly the abuse to avoid (review #3).
+  const m = entries.find((e) => authorityOf(e.url) === wantAuth);
   return m ? { username: m.username || '', password: m.password || '' } : null;
 }
 

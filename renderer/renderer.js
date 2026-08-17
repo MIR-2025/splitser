@@ -453,7 +453,10 @@ function moveSuggest(pane, d) {
   box.querySelectorAll('.sug').forEach((el, i) => el.classList.toggle('sel', i === pane.sugIdx));
 }
 function hideSuggest(pane) { const b = pane.el.querySelector('.suggest'); b.hidden = true; b.innerHTML = ''; pane.sugIdx = -1; }
-function esc(s) { return String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+// Escapes & < > AND both quote characters, so esc() is safe in an attribute value as well as in text
+// content. There is deliberately only ONE escaper: a separate attribute-only variant is a footgun (the
+// unsafe one always ends up with the shorter name and gets reached for by habit -- security review #1).
+function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
 function closePane(pane) {
   if (panes.length <= 1) {                         // closing the only pane of a set...
@@ -843,7 +846,12 @@ function showAuthDialog(d) {
   document.querySelectorAll('.auth-modal').forEach((m) => m.remove());
   const pre = Vault.credsForHost(d.host, d.port) || { username: '', password: '' };
   const locked = !Vault.unlocked();
-  const where = (d.isProxy ? 'Proxy ' : '') + esc(d.host) + (d.port && d.port !== 80 && d.port !== 443 ? ':' + d.port : '');
+  // Name the actual origin (scheme + host) that asked, not just the bare host -- so the user can tell an
+  // https page from a plaintext one, and there is no ambiguity about which page raised the prompt (review #3).
+  const originStr = (() => { try { return new URL(d.url).origin; } catch { return ''; } })();
+  const where = d.isProxy
+    ? 'Proxy ' + esc(d.host) + (d.port && d.port !== 80 && d.port !== 443 ? ':' + d.port : '')
+    : esc(originStr || d.host);
   const modal = document.createElement('div');
   modal.className = 'auth-modal';
   modal.innerHTML = '<div class="auth-box">' +
@@ -928,18 +936,17 @@ const bmCollapsed = new Set();   // folder names collapsed in the panel (this se
 async function renderBookmarks() {
   const [bms, folders] = await Promise.all([api.bookmarksGet(), api.bookmarkFolders()]);
   const list = document.getElementById('bm-list');
-  const escA = (s) => esc(s).replace(/"/g, '&quot;');                       // attribute-safe
   const folderSel = (key, cur) =>
-    `<select class="row-folder" data-key="${escA(String(key))}" title="Move to folder">` +
+    `<select class="row-folder" data-key="${esc(String(key))}" title="Move to folder">` +
     `<option value=""${cur ? '' : ' selected'}>no folder</option>` +
-    folders.map((f) => `<option value="${escA(f)}"${f === cur ? ' selected' : ''}>${esc(f)}</option>`).join('') +
+    folders.map((f) => `<option value="${esc(f)}"${f === cur ? ' selected' : ''}>${esc(f)}</option>`).join('') +
     `</select>`;
   const rowHtml = (b) => {
     const key = b.type === 'workspace' ? b.id : b.url;
     const main = b.type === 'workspace'
-      ? `<a class="row-main" data-ws="${escA(b.id)}"><span class="row-t">&#9638; ${esc(b.name || 'Workspace')}</span><span class="row-u">${(b.panes || []).length} pane${(b.panes || []).length === 1 ? '' : 's'} · ${esc(b.layout || 'cols')}</span></a>`
-      : `<a class="row-main" data-url="${escA(b.url)}"><span class="row-t">${esc(b.title || b.url)}</span><span class="row-u">${esc(b.url)}</span></a>`;
-    return `<div class="row">${main}${folderSel(key, b.folder || '')}<button class="row-x" data-key="${escA(String(key))}" title="Remove">&#215;</button></div>`;
+      ? `<a class="row-main" data-ws="${esc(b.id)}"><span class="row-t">&#9638; ${esc(b.name || 'Workspace')}</span><span class="row-u">${(b.panes || []).length} pane${(b.panes || []).length === 1 ? '' : 's'} · ${esc(b.layout || 'cols')}</span></a>`
+      : `<a class="row-main" data-url="${esc(b.url)}"><span class="row-t">${esc(b.title || b.url)}</span><span class="row-u">${esc(b.url)}</span></a>`;
+    return `<div class="row">${main}${folderSel(key, b.folder || '')}<button class="row-x" data-key="${esc(String(key))}" title="Remove">&#215;</button></div>`;
   };
 
   if (!bms.length && !folders.length) {
@@ -953,12 +960,12 @@ async function renderBookmarks() {
     const collapsed = bmCollapsed.has(f);
     html +=
       `<div class="bm-folder${collapsed ? ' collapsed' : ''}">` +
-      `<div class="bm-folder-h" data-folder="${escA(f)}">` +
+      `<div class="bm-folder-h" data-folder="${esc(f)}">` +
         `<span class="bm-caret">${collapsed ? '&#9656;' : '&#9662;'}</span>` +
-        `<span class="bm-fold-name" data-folder="${escA(f)}">${esc(f)}</span>` +
+        `<span class="bm-fold-name" data-folder="${esc(f)}">${esc(f)}</span>` +
         `<span class="bm-fold-count">${items.length}</span>` +
-        `<button class="bm-fold-btn" data-rename="${escA(f)}" title="Rename folder">&#9998;</button>` +
-        `<button class="bm-fold-btn" data-delfolder="${escA(f)}" title="Delete folder (keeps its bookmarks)">&#215;</button>` +
+        `<button class="bm-fold-btn" data-rename="${esc(f)}" title="Rename folder">&#9998;</button>` +
+        `<button class="bm-fold-btn" data-delfolder="${esc(f)}" title="Delete folder (keeps its bookmarks)">&#215;</button>` +
       `</div>` +
       `<div class="bm-folder-items">${items.map(rowHtml).join('') || '<p class="bm-fold-empty">Empty -- assign bookmarks with the folder menu.</p>'}</div>` +
       `</div>`;
@@ -1073,7 +1080,7 @@ function showDlToast(d) {
   const status = done ? 'Downloaded' : failed ? 'Download ' + d.state : (d.total ? pct + '% · ' + fmt(d.received) : fmt(d.received));
   el.innerHTML =
     '<div class="dlt-ico">' + (done ? '✓' : failed ? '✕' : '↓') + '</div>' +
-    '<div class="dlt-body"><div class="dlt-name" title="' + esc(d.name) + '">' + esc(d.name) + '</div>' +
+    '<div class="dlt-body"><div class="dlt-name" title="' + esc(d.name) + '">' + esc(d.name) + '</div>' +  // esc() escapes quotes, so a filename cannot break out of title=""
     '<div class="dlt-sub">' + status + '</div>' +
     (done ? '<div class="dlt-actions"><button class="dlt-btn" data-a="open">Open</button><button class="dlt-btn" data-a="folder">Show in folder</button></div>' : '') +
     '</div><button class="dlt-x" title="Dismiss">×</button>' +

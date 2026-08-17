@@ -119,7 +119,11 @@ function deleteCustomTheme(name) { customThemes = customThemes.filter((t) => t.n
 // shared theme can't quietly phone home when it paints.
 function sanitizeThemeImg(img) {
   if (typeof img !== 'string' || !img) return '';
-  if (img.startsWith('data:image/')) return img;
+  // Validate the WHOLE string, not just the prefix. A prefix check (startsWith('data:image/')) let a
+  // shared theme code smuggle CSS after the data URL -- e.g. `data:image/png;base64,AA="), url("https://
+  // attacker/beacon` -- which then went into url() and quietly beaconed the recipient's IP. Only a
+  // base64 raster payload with nothing trailing is allowed through (security review #2).
+  if (/^data:image\/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(img)) return img;
   if (/^banners\/[\w.-]+\.(png|jpe?g|webp|svg)$/i.test(img)) return img;
   return '';
 }
