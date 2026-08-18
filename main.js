@@ -1,7 +1,7 @@
 // Splitser (splitser.org) — main process. Hosts the renderer UI with <webview> enabled
 // (real Chromium views, no header-strip), owns the data layer (history/bookmarks/session/
 // settings via store.js), and handles downloads + permission prompts on the shared session.
-import { app, BrowserWindow, ipcMain, session as electronSession, dialog, shell, clipboard, webContents, Menu } from 'electron';
+import { app, BrowserWindow, ipcMain, session as electronSession, dialog, shell, clipboard, webContents, Menu, screen } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -119,15 +119,31 @@ function wireShortcuts(contents) {
 }
 
 function createWindow() {
-  win = new BrowserWindow({
+  const winOpts = {
     width: 1500, height: 940, backgroundColor: '#0e1418', title: 'Splitser',
     autoHideMenuBar: true,          // the default File/Edit/View menu is dead weight for a browser; hide it (Alt reveals)
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       webviewTag: true, contextIsolation: true, nodeIntegration: false, sandbox: true
     }
-  });
+  };
+  // reopen where it was closed: restore the saved size/position, but only use the position if it still
+  // lands on a currently-connected display (so a disconnected monitor can't strand the window off-screen)
+  const savedWin = store.getWindowState();
+  if (savedWin && Number.isFinite(savedWin.width) && Number.isFinite(savedWin.height)) {
+    winOpts.width = savedWin.width; winOpts.height = savedWin.height;
+    if (Number.isFinite(savedWin.x) && Number.isFinite(savedWin.y)) {
+      const wa = screen.getDisplayMatching({ x: savedWin.x, y: savedWin.y, width: savedWin.width, height: savedWin.height }).workArea;
+      const onScreen = savedWin.x < wa.x + wa.width && savedWin.x + savedWin.width > wa.x && savedWin.y < wa.y + wa.height && savedWin.y + savedWin.height > wa.y;
+      if (onScreen && savedWin.y >= wa.y - 8) { winOpts.x = savedWin.x; winOpts.y = savedWin.y; }   // else let the WM centre it on the primary display
+    }
+  }
+  win = new BrowserWindow(winOpts);
+  if (savedWin && savedWin.maximized) win.maximize();
   win.setMenuBarVisibility(false);
+  // remember size / position / monitor + maximized state whenever they change
+  const saveWinState = () => { if (win && !win.isDestroyed()) { const b = win.getNormalBounds(); store.setWindowState({ x: b.x, y: b.y, width: b.width, height: b.height, maximized: win.isMaximized() }); } };
+  ['resized', 'moved', 'maximize', 'unmaximize', 'close'].forEach((ev) => win.on(ev, saveWinState));
   win.once('ready-to-show', () => {   // come to the front on launch -- don't hide behind whatever was focused (e.g. the terminal)
     win.show(); win.moveTop(); win.focus();
     try { app.focus({ steal: true }); } catch { /* not supported on some platforms */ }

@@ -6,6 +6,15 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.21 — 2026-08-18
+### Added
+- **Reopens where you left it.** Splitser remembers its window size, position, and which monitor it was on,
+  and restores them on launch. If that monitor is no longer connected, it falls back to centered on the
+  primary display, so a disconnected screen can't strand the window off-screen.
+- **Match theme colours to the header image.** In Appearance, when a header image is set, a "🎨 Match
+  colours" button derives the palette from it -- a dark, image-tinted background and toolbar plus the
+  image's most vibrant colour as the accent. (Pick a sunset banner, hit it, and the theme goes warm.)
+
 ## 0.1.20 — 2026-08-18
 ### Added
 - **Works as a default web browser.** Splitser now registers as an http/https handler and opens links

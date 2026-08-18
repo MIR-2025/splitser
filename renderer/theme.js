@@ -171,6 +171,52 @@ function shrinkImage(file, maxW, maxH) {
 }
 function notice(msg) { noteMsg = msg; if (!panelEl || !panelEl.hidden) renderPanel(); clearTimeout(notice._t); notice._t = setTimeout(() => { noteMsg = ''; if (panelEl && !panelEl.hidden) renderPanel(); }, 2600); }
 
+// ---- derive a colour scheme from the header image: a dark, image-tinted background/bar + the image's
+// most vibrant colour as the accent. Reads pixels from a downscaled canvas (works for bundled banners,
+// uploads, and gradient SVGs; a remote image would taint the canvas and reject -- but theme.img is
+// filtered to no remote URLs). ----
+function rgbToHsl(r, g, b) {
+  r /= 255; g /= 255; b /= 255; const mx = Math.max(r, g, b), mn = Math.min(r, g, b); let h = 0, s = 0; const l = (mx + mn) / 2;
+  if (mx !== mn) { const d = mx - mn; s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
+    h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h /= 6; }
+  return { h, s, l };
+}
+function hslToHex(h, s, l) {
+  const f = (n) => { const k = (n + h * 12) % 12; const a = s * Math.min(l, 1 - l); const c = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); return Math.round(c * 255).toString(16).padStart(2, '0'); };
+  return '#' + f(0) + f(8) + f(4);
+}
+function paletteFromImage(url) {
+  return new Promise((resolve, reject) => {
+    if (!url) return reject(new Error('no image'));
+    const im = new Image();
+    im.onload = () => {
+      try {
+        const S = 56, c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d');
+        g.drawImage(im, 0, 0, S, S);
+        const d = g.getImageData(0, 0, S, S).data;
+        let rs = 0, gs = 0, bs = 0, n = 0, acc = null, accScore = -1;
+        for (let i = 0; i < d.length; i += 4) {
+          const r = d[i], gc = d[i + 1], b = d[i + 2]; if (d[i + 3] < 128) continue;
+          rs += r; gs += gc; bs += b; n++;
+          const { s, l } = rgbToHsl(r, gc, b);
+          const score = s * (1 - Math.abs(l - 0.5) * 1.3);   // vibrant + mid-light -> a good accent
+          if (score > accScore) { accScore = score; acc = [r, gc, b]; }
+        }
+        if (!n) return reject(new Error('empty'));
+        const ah = rgbToHsl(rs / n, gs / n, bs / n);         // average hue -> tints the dark bg/bar
+        const as = rgbToHsl(acc[0], acc[1], acc[2]);
+        resolve({
+          bg: hslToHex(ah.h, Math.min(0.35, ah.s), 0.07),
+          bar: hslToHex(ah.h, Math.min(0.30, ah.s), 0.12),
+          accent: hslToHex(as.h, Math.max(0.5, as.s), Math.min(0.68, Math.max(0.52, as.l))),
+          text: '#e9e6dc'
+        });
+      } catch (e) { reject(e); }   // tainted canvas (remote image) -> can't read pixels
+    };
+    im.onerror = () => reject(new Error('load'));
+    im.src = url;
+  });
+}
 function renderPanel() {
   if (!bodyEl) return;
   const chip = (name, c, kind) =>
@@ -209,7 +255,7 @@ function renderPanel() {
       `<button class="th-btn2" id="th-import-add">Add</button>` +
       `<label class="th-btn2" id="th-import-filebtn">Load .json<input id="th-import-file" type="file" accept=".json,application/json" hidden /></label></div></div>
     <div class="th-row"><span class="th-note">${esc(noteMsg)}</span><div class="th-wrap th-foot">` +
-      `${theme.img ? '<button class="th-btn2" id="th-clearimg">Remove image</button>' : ''}<button class="th-btn" id="th-reset">Reset</button></div></div>`;
+      `${theme.img ? '<button class="th-btn2" id="th-matchcolors" title="Set the palette from the header image">&#127912; Match colours</button><button class="th-btn2" id="th-clearimg">Remove image</button>' : ''}<button class="th-btn" id="th-reset">Reset</button></div></div>`;
 
   bodyEl.querySelectorAll('.th-chip').forEach((b) => { b.onclick = () => {
     if (b.dataset.kind === 'look') { const L = LOOKS[b.dataset.name]; set({ bg: L.bg, bar: L.bar, accent: L.accent, text: L.text, img: lookBanner(L) }); }
@@ -229,6 +275,8 @@ function renderPanel() {
   const impAdd = bodyEl.querySelector('#th-import-add'); if (impAdd) impAdd.onclick = () => importThemeFromText(draftImport);
   const impFile = bodyEl.querySelector('#th-import-file'); if (impFile) impFile.onchange = (e) => { const f = e.target.files[0]; if (f) f.text().then(importThemeFromText); };
   const clr = bodyEl.querySelector('#th-clearimg'); if (clr) clr.onclick = () => set({ img: '' });
+  const matchc = bodyEl.querySelector('#th-matchcolors');
+  if (matchc) matchc.onclick = async () => { try { set(await paletteFromImage(theme.img)); notice('Colours matched to the image'); } catch (e) { notice('Could not read that image'); } };
   bodyEl.querySelector('#th-reset').onclick = () => set({ ...DEFAULT });
   const file = bodyEl.querySelector('#th-file');
   if (file) file.onchange = async (e) => { const f = e.target.files[0]; if (!f) return; try { set({ img: await shrinkImage(f, 2560, 1600) }); } catch (err) { notice('Could not load that image'); } };
