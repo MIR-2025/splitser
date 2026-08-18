@@ -6,6 +6,13 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.24 — 2026-08-18
+### Changed
+- **macOS builds are now signed with a Developer ID and notarized by Apple.** The `.dmg` runs the app under
+  the hardened runtime, signed with a Developer ID Application certificate and stapled with an Apple
+  notarization ticket -- so it opens without the Gatekeeper "unidentified developer" / "can't be opened"
+  warning. (Windows and Linux installers remain unsigned for now.)
+
 ## 0.1.23 — 2026-08-18
 ### Fixed
 - **Invalid-certificate pages no longer blank silently.** When a site's TLS certificate is untrusted

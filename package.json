@@ -1,6 +1,6 @@
 {
   "name": "splitser",
-  "version": "0.1.23",
+  "version": "0.1.24",
   "private": true,
   "description": "Splitser (splitser.org) -- a tiling browser: the Split Screen UI on Electron + <webview>.",
   "author": "Richard Whitney <richard@whitneys.co>",
@@ -56,7 +56,12 @@
     "mac": {
       "target": ["dmg"],
       "category": "public.app-category.productivity",
-      "icon": "build/icon.png"
+      "icon": "build/icon.png",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
+      "notarize": { "teamId": "${env.APPLE_TEAM_ID}" }
     },
     "dmg": {
       "title": "Splitser ${version}"

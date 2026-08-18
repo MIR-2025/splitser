@@ -51,6 +51,15 @@ jobs:
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS code-signing + notarization. Scoped to the mac jobs so a mac .p12 never
+          # reaches the Windows job (CSC_LINK drives Windows signing too). Entirely inert until
+          # the repo secrets below exist: electron-builder skips signing when CSC_LINK is empty,
+          # and notarization only runs on a signed app -- so unsigned builds stay green meanwhile.
+          CSC_LINK: ${{ startsWith(matrix.os, 'macos') && secrets.SPLITSER_MAC || '' }}
+          CSC_KEY_PASSWORD: ${{ startsWith(matrix.os, 'macos') && secrets.SPLITSER_MAC_CSC_PASSWORD || '' }}
+          APPLE_ID: ${{ startsWith(matrix.os, 'macos') && secrets.SPLITSER_APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ startsWith(matrix.os, 'macos') && secrets.SPLITSER_APPLE_APP_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ startsWith(matrix.os, 'macos') && secrets.SPLITSER_APPLE_TEAM_ID || '' }}
       - uses: actions/upload-artifact@v4
         with:
           name: splitser-${{ matrix.artifact }}
