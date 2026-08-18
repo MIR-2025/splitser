@@ -1371,6 +1371,7 @@ Vault.init({ api, getPanes: () => panes, getActive: () => active() });
 Theme.init();
 Theme.onChange((t) => { if (cur) { cur.theme = t; saveSession(); } });   // a theme edit belongs to the current set
 updateGridBtn();
+if (api.appReady) api.appReady();   // restore + vault + theme are up -> main may now open a URL Splitser was launched with
 
 // ---- footer Grid picker: a "Grid: C×R" button with a 3×3 hover-to-pick flyout (max 3×3) ----
 const gridBtn = document.getElementById('grid-btn');

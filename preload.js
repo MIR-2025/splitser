@@ -4,6 +4,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('splitAPI', {
   home: ipcRenderer.sendSync('app:home'),   // home dir for ~/path expansion (sync, sandbox-safe -- no os require)
   version: ipcRenderer.sendSync('app:version'),   // app build version for the About popover
+  appReady: () => ipcRenderer.send('app:ready'),   // renderer signals restore is done (so main can open a launch URL)
   // main -> renderer events
   onOpenPane: (cb) => ipcRenderer.on('open-pane', (_e, url) => cb(url)),
   onShortcut: (cb) => ipcRenderer.on('shortcut', (_e, key) => cb(key)),

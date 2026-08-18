@@ -12,6 +12,21 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 app.setName('Splitser');
 let win;
 
+// ---- default-browser support: run ONE instance. A clicked link launches Splitser with the URL as an
+// argv (opened once the renderer is ready), or -- if we're already running -- the OS starts a second
+// instance whose argv is handed to us via 'second-instance', where we open it in a new pane. ----
+function urlFromArgv(argv) { return (argv || []).find((a) => /^https?:\/\//i.test(a)) || ''; }
+let pendingUrl = urlFromArgv(process.argv);            // a URL from THIS launch, opened after the UI is ready
+const gotSingleLock = app.requestSingleInstanceLock();
+if (!gotSingleLock) { app.quit(); }
+else {
+  try { app.setAsDefaultProtocolClient('http'); app.setAsDefaultProtocolClient('https'); } catch (e) { /* best effort */ }
+  app.on('second-instance', (_e, argv) => {
+    const url = urlFromArgv(argv);
+    if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); if (url) win.webContents.send('open-pane', url); }
+  });
+}
+
 // ---- shields: ad/tracker blocking, on by default, with a per-site allowlist ----
 let blocker = null;                              // Ghostery engine (EasyList-class), loaded async
 const _sh = store.getShields();
@@ -160,6 +175,7 @@ ipcMain.handle('cert:get', (_e, host) => certCache.get((host || '').replace(/^ww
 const dlPaths = new Set();   // full paths of files we've saved -- open/reveal is gated to these
 ipcMain.on('app:home', (e) => { e.returnValue = app.getPath('home'); });   // sync home dir for the sandboxed preload
 ipcMain.on('app:version', (e) => { e.returnValue = app.getVersion(); });   // sync app version for the About popover
+ipcMain.on('app:ready', () => { if (pendingUrl && win && !win.isDestroyed()) { win.webContents.send('open-pane', pendingUrl); pendingUrl = ''; } });   // renderer restore done -> open a launch URL
 ipcMain.on('open-downloads', () => shell.openPath(app.getPath('downloads')));
 ipcMain.on('download:open', (_e, p) => { if (dlPaths.has(p)) shell.openPath(p); });
 ipcMain.on('download:reveal', (_e, p) => { if (dlPaths.has(p)) shell.showItemInFolder(p); });
@@ -216,6 +232,7 @@ ipcMain.on('http-auth-reply', (_e, { id, username, password }) => {
 });
 
 app.whenReady().then(() => {
+  if (!gotSingleLock) return;   // a non-primary instance is quitting -- don't build a session/window
   // Present as vanilla Chrome: drop the "Splitser/x" and "Electron/x" UA tokens. Some sites (Google
   // sign-in, banks) refuse or degrade for anything advertising Electron -- bad for a logged-in-apps browser.
   app.userAgentFallback = app.userAgentFallback.replace(/ (Splitser|Electron)\/\S+/g, '');

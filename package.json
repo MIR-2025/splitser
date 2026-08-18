@@ -1,6 +1,6 @@
 {
   "name": "splitser",
-  "version": "0.1.19",
+  "version": "0.1.20",
   "private": true,
   "description": "Splitser (splitser.org) -- a tiling browser: the Split Screen UI on Electron + <webview>.",
   "author": "Richard Whitney <richard@whitneys.co>",
@@ -33,7 +33,13 @@
       "maintainer": "Richard Whitney <richard@whitneys.co>",
       "synopsis": "A tiling browser -- your logged-in apps, side by side",
       "description": "Splitser tiles real, logged-in websites side by side in resizable panes and grids, with named workspaces, per-workspace themes, a built-in password vault, and ad/tracker blocking.",
-      "icon": "build/icons"
+      "icon": "build/icons",
+      "mimeTypes": [
+        "x-scheme-handler/http",
+        "x-scheme-handler/https",
+        "text/html",
+        "application/xhtml+xml"
+      ]
     },
     "deb": { "afterInstall": "build/after-install.sh" },
     "rpm": { "afterInstall": "build/after-install.sh" },

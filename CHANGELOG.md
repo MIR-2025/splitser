@@ -6,6 +6,19 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.20 — 2026-08-18
+### Added
+- **Works as a default web browser.** Splitser now registers as an http/https handler and opens links
+  handed to it: click a link in another app (email, chat, terminal) and it opens in a new pane in the
+  current workspace. It runs a **single instance per profile** -- a second launch (like a clicked link)
+  hands its URL to the running window instead of starting a duplicate. (`splitser new <name>` still gets
+  its own separate instance + profile, since it uses a different profile dir.)
+### Fixed
+- The packaged `.desktop` now sets `MimeType=x-scheme-handler/http;https;text/html;…`, so the OS can route
+  web links to Splitser (then `xdg-settings set default-web-browser splitser.desktop`). Before there was no
+  MimeType, so Splitser couldn't be registered as a browser at all -- and even if launched, it ignored the
+  URL (no argv handling); both are fixed.
+
 ## 0.1.19 — 2026-08-17
 ### Added
 - **Per-pane split tiling (Terminator-style).** `Ctrl+Shift+E` splits the focused pane to the **right**,
