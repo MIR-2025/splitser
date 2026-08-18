@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('splitAPI', {
   onShields: (cb) => ipcRenderer.on('shields-update', (_e, d) => cb(d)),
   onHttpAuth: (cb) => ipcRenderer.on('http-auth', (_e, d) => cb(d)),
   onOpenTabIn: (cb) => ipcRenderer.on('open-tab-in', (_e, d) => cb(d)),
+  onCertError: (cb) => ipcRenderer.on('cert-error', (_e, d) => cb(d)),   // main-frame cert rejected -> show interstitial
 
   // shields (ad/tracker blocking)
   shieldsGet: (wcId) => ipcRenderer.invoke('shields:get', wcId),
@@ -47,6 +48,7 @@ contextBridge.exposeInMainWorld('splitAPI', {
   settingsSet: (patch) => ipcRenderer.invoke('settings:set', patch),
   clearData: (kind) => ipcRenderer.invoke('data:clear', kind),
   certGet: (host) => ipcRenderer.invoke('cert:get', host),        // last-seen TLS cert summary for the security badge
+  certProceed: (d) => ipcRenderer.invoke('cert:proceed', d),      // user chose to continue past a bad cert -> trust host + reload
   openDownloads: () => ipcRenderer.send('open-downloads'),
   openDownload: (p) => ipcRenderer.send('download:open', p),      // open a finished download (main validates the path)
   revealDownload: (p) => ipcRenderer.send('download:reveal', p),  // show it in the OS file manager

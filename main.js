@@ -187,7 +187,14 @@ ipcMain.handle('settings:get', () => store.getSettings());
 ipcMain.handle('settings:set', (_e, patch) => store.setSettings(patch));
 ipcMain.handle('data:clear', (_e, kind) => store.clearData(kind));
 const certCache = new Map();   // hostname -> last-seen TLS cert summary, for the address-bar security badge
+const certOverrides = new Set();   // hostnames the user chose to proceed to despite a bad cert (this session only)
 ipcMain.handle('cert:get', (_e, host) => certCache.get((host || '').replace(/^www\./, '')) || null);
+ipcMain.handle('cert:proceed', (_e, { wcId, host, url }) => {   // user clicked "proceed anyway" on the interstitial
+  if (host) certOverrides.add(host.replace(/^www\./, ''));
+  const wc = wcId ? webContents.fromId(wcId) : null;
+  if (wc && !wc.isDestroyed() && url) { try { wc.loadURL(url); } catch (e) { /* ignore */ } }
+  return true;
+});
 const dlPaths = new Set();   // full paths of files we've saved -- open/reveal is gated to these
 ipcMain.on('app:home', (e) => { e.returnValue = app.getPath('home'); });   // sync home dir for the sandboxed preload
 ipcMain.on('app:version', (e) => { e.returnValue = app.getVersion(); });   // sync app version for the About popover
@@ -356,6 +363,14 @@ app.whenReady().then(() => {
       }
     });
     contents.on('context-menu', (_ev, p) => buildContextMenu(contents, p).popup({ window: win }));
+    contents.on('certificate-error', (event, url, error, _certificate, callback, isMainFrame) => {
+      let host = '';
+      try { host = new URL(url).hostname.replace(/^www\./, ''); } catch { /* ignore */ }
+      if (host && certOverrides.has(host)) { event.preventDefault(); callback(true); return; }   // user already chose to proceed
+      callback(false);                                                                            // otherwise keep blocking (the load fails)
+      if (isMainFrame !== false && win && !win.isDestroyed())                                     // main-frame failure -> show the interstitial
+        win.webContents.send('cert-error', { wcId: contents.id, url, host, error });
+    });
     wireShortcuts(contents);
   });
 

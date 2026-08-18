@@ -6,6 +6,14 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.23 — 2026-08-18
+### Fixed
+- **Invalid-certificate pages no longer blank silently.** When a site's TLS certificate is untrusted
+  (expired, self-signed, wrong domain, revoked…), the pane now shows a "Your connection isn't private"
+  interstitial explaining the problem, with **Back to safety** and **Proceed anyway (unsafe)**. Proceeding
+  trusts that host for the rest of the session and reloads. Previously the load just failed to a blank pane
+  with no warning and no way through.
+
 ## 0.1.22 — 2026-08-18
 ### Added
 - **History from the nav buttons.** Right-click the back or forward button in a pane to get a menu of up to

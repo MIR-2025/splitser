@@ -328,6 +328,23 @@ webview{ display:flex }
   padding:6px 9px; border-radius:6px; cursor:pointer; white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
 .navhist-item:hover{ background:var(--field) }
 
+/* Bad-cert interstitial -- full-cover over the (blank) webview, like a browser's "not private" page */
+.cert-interstitial{ position:absolute; inset:0; z-index:47; display:none; align-items:center; justify-content:center;
+  background:var(--bg); color:var(--text); padding:24px; overflow:auto }
+.cert-interstitial.show{ display:flex }
+.ci-box{ max-width:440px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:10px }
+.ci-icon{ font-size:38px; line-height:1 }
+.ci-h{ font-size:19px; font-weight:600 }
+.ci-host{ font-size:12px; color:var(--muted); word-break:break-all; font-family:ui-monospace,Menlo,monospace }
+.ci-msg{ font-size:13px; line-height:1.55; opacity:.92 }
+.ci-code{ font-size:11px; color:var(--muted); font-family:ui-monospace,Menlo,monospace }
+.ci-actions{ display:flex; gap:10px; margin-top:14px; flex-wrap:wrap; justify-content:center }
+.ci-actions button{ height:34px; padding:0 16px; border-radius:8px; font-size:13px; cursor:pointer }
+.ci-back{ background:var(--accent); color:#05130a; border:0; font-weight:600 }
+.ci-back:hover{ filter:brightness(1.08) }
+.ci-proceed{ background:transparent; color:var(--muted); border:1px solid var(--line-2) }
+.ci-proceed:hover{ color:#f7b955; border-color:#f7b955 }
+
 .settings{display:flex; flex-direction:column; gap:12px; padding:10px 8px}
 .settings label{display:flex; flex-direction:column; gap:5px; font-size:12px; color:var(--muted)}
 .settings .hint{color:var(--line-2); font-size:11px}

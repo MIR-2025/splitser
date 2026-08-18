@@ -237,6 +237,16 @@ const FINDBAR = `
     <button class="find-btn find-close" title="Close (Esc)">&#215;</button>
   </div>`;
 
+function certErrText(code) {   // Chromium cert error code -> a plain-language reason
+  const c = String(code || '');
+  if (/DATE_INVALID/.test(c)) return 'This site\'s security certificate has expired, or your device clock is wrong.';
+  if (/AUTHORITY_INVALID|SELF_SIGNED/.test(c)) return 'This site\'s certificate isn\'t from a recognised authority (it may be self-signed).';
+  if (/COMMON_NAME_INVALID/.test(c)) return 'This site\'s certificate was issued for a different domain.';
+  if (/REVOKED/.test(c)) return 'This site\'s certificate has been revoked.';
+  if (/WEAK|OBSOLETE/.test(c)) return 'This site\'s certificate uses a weak, insecure algorithm.';
+  return 'This site\'s security certificate is not trusted.';
+}
+
 function makePane(url, beforeEl = null, tabUrls = null) {
   url = url || SETTINGS.home;
   const el = document.createElement('section');
@@ -307,6 +317,39 @@ function makePane(url, beforeEl = null, tabUrls = null) {
   pane.syncDrmNote = () => {                          // keep the notice tied to the active tab
     if (pane.activeTab && pane.activeTab.drm) pane.showDrmNote();
     else if (pane._drmNote) pane._drmNote.classList.remove('show');
+  };
+  pane.showCertError = (info) => {                    // full-cover "your connection isn't private" interstitial
+    let n = pane._certInt;
+    if (!n) { n = document.createElement('div'); n.className = 'cert-interstitial'; pane.viewsBox.appendChild(n); pane._certInt = n; }
+    const host = info.host || 'this site';
+    n.innerHTML =
+      '<div class="ci-box">' +
+        '<div class="ci-icon">&#9888;&#65039;</div>' +
+        '<div class="ci-h">Your connection isn\'t private</div>' +
+        '<div class="ci-host">' + esc(host) + '</div>' +
+        '<div class="ci-msg">' + esc(certErrText(info.error)) +
+          ' Attackers could be trying to impersonate it or read what you send (passwords, messages, card details).</div>' +
+        '<div class="ci-code">' + esc(info.error || '') + '</div>' +
+        '<div class="ci-actions">' +
+          '<button class="ci-back">&#8592; Back to safety</button>' +
+          '<button class="ci-proceed">Proceed anyway (unsafe)</button>' +
+        '</div>' +
+      '</div>';
+    n.querySelector('.ci-back').addEventListener('click', () => {
+      if (pane.activeTab) pane.activeTab.certError = null;
+      n.classList.remove('show');
+      if (pane.view && pane.view.canGoBack()) pane.view.goBack(); else if (pane.view) pane.view.loadURL(SETTINGS.home);
+    });
+    n.querySelector('.ci-proceed').addEventListener('click', () => {
+      const t = pane.activeTab, ci = t && t.certError; if (!ci) return;
+      n.classList.remove('show');
+      api.certProceed({ wcId: t.wcId, host: ci.host, url: ci.url });   // main trusts the host for this session + reloads
+    });
+    n.classList.add('show');
+  };
+  pane.syncCertError = () => {                        // keep the interstitial tied to the active tab
+    if (pane.activeTab && pane.activeTab.certError) pane.showCertError(pane.activeTab.certError);
+    else if (pane._certInt) pane._certInt.classList.remove('show');
   };
   pane.toggleMute = () => { const t = pane.activeTab; if (!t) return; t.muted = !t.muted; pane.view.setAudioMuted(t.muted); muteBtn.hidden = false; muteBtn.innerHTML = t.muted ? '&#128263;' : '&#128266;'; };
   pane.updateShield = (info) => {
@@ -495,10 +538,10 @@ function addTab(pane, url) {
   };
   tab.syncFav = syncFav;
 
-  view.addEventListener('did-navigate', () => { tab.url = view.getURL(); tab.realFavicon = ''; tab.drm = isDrmHost(tab.url); syncFav(); if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); pane.syncDrmNote(); pane.updateLock(); } saveSession(); });
+  view.addEventListener('did-navigate', () => { tab.url = view.getURL(); tab.realFavicon = ''; tab.drm = isDrmHost(tab.url); tab.certError = null; syncFav(); if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); pane.syncDrmNote(); pane.syncCertError(); pane.updateLock(); } saveSession(); });
   view.addEventListener('did-navigate-in-page', () => { tab.url = view.getURL(); if (active()) pane.syncAddr(); });
   view.addEventListener('dom-ready', () => { try { tab.wcId = view.getWebContentsId(); } catch (e) { /* not attached yet */ } if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); pane.refreshShield(); } });
-  view.addEventListener('did-start-loading', () => { tab.loading = true; tab.drm = false; tabEl.classList.add('loading'); if (active()) { pane.spin.hidden = false; pane.syncDrmNote(); } });
+  view.addEventListener('did-start-loading', () => { tab.loading = true; tab.drm = false; try { tab.wcId = view.getWebContentsId(); } catch (e) { /* not attached yet */ } tab.certError = null; tabEl.classList.add('loading'); if (active()) { pane.spin.hidden = false; pane.syncDrmNote(); pane.syncCertError(); } });
   view.addEventListener('did-stop-loading', () => { tab.loading = false; tabEl.classList.remove('loading'); if (active()) { pane.spin.hidden = true; pane.syncAddr(); } const u = view.getURL(); if (/^https?:/.test(u) && !pane.incognito) api.historyAdd({ url: u, title: tab.title });
     if (/^file:\/\/.*\.(md|markdown)(\?|#|$)/i.test(u)) view.executeJavaScript('(' + mdViewerInject.toString() + ')()').catch(() => {});   // render local markdown
     else if (/^file:\/\//i.test(u) || /\.(txt|text|log|csv|tsv|json|xml|ya?ml|ini|conf|cfg|md5|sha\d*sums?)(\?|#|$)/i.test(u)) view.executeJavaScript('(' + plainTextThemeInject.toString() + ')()').catch(() => {}); });   // make raw text/plain readable
@@ -533,7 +576,7 @@ function switchTab(pane, tab) {
   pane.spin.hidden = !tab.loading;
   pane.muteBtn.hidden = !(tab.muted || tab.audio); pane.muteBtn.innerHTML = tab.muted ? '&#128263;' : '&#128266;';
   pane.findbar.hidden = true; pane.findCount.textContent = '';
-  pane.refreshStar(); Vault.refreshPaneKey(pane); pane.refreshShield(); pane.syncDrmNote(); pane.updateLock(); updateTitle();
+  pane.refreshStar(); Vault.refreshPaneKey(pane); pane.refreshShield(); pane.syncDrmNote(); pane.syncCertError(); pane.updateLock(); updateTitle();
 }
 
 function closeTab(pane, tab) {
@@ -1094,6 +1137,9 @@ api.onShortcut(handleShortcut);
 api.onOpenPane((url) => { const p = makePane(url, active() ? active().el.nextElementSibling : null); rebuildGutters(); saveSession(); activePane = p; });
 // live shield counts: route to whichever pane's ACTIVE tab this webContents is
 api.onShields((d) => { for (const s of sets) for (const p of s.panes) { if (p.activeTab && p.activeTab.wcId === d.wcId) { p.updateShield(d); return; } } });
+
+// A page's TLS cert was rejected -> flag the tab and show the interstitial (if it's the visible one)
+api.onCertError((d) => { for (const s of sets) for (const p of s.panes) for (const t of p.tabs) { if (t.wcId === d.wcId) { t.certError = d; if (p.activeTab === t) p.syncCertError(); return; } } });
 
 // "Open link in new tab" from the context menu -> a tab in the pane that was right-clicked
 api.onOpenTabIn((d) => { for (const s of sets) for (const p of s.panes) { if (p.activeTab && p.activeTab.wcId === d.wcId) { activePane = p; addTab(p, d.url); return; } } });
