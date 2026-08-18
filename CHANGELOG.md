@@ -6,6 +6,12 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.22 — 2026-08-18
+### Added
+- **History from the nav buttons.** Right-click the back or forward button in a pane to get a menu of up to
+  10 history entries (page titles) and jump straight to any of them -- back lists the pages behind the
+  current one, forward the pages ahead, each nearest-first. Left-click still steps one page at a time.
+
 ## 0.1.21 — 2026-08-18
 ### Added
 - **Reopens where you left it.** Splitser remembers its window size, position, and which monitor it was on,

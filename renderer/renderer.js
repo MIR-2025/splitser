@@ -182,6 +182,36 @@ async function openCertPopover(pane) {
   setTimeout(() => document.addEventListener('mousedown', function h(e) { if (!pop.contains(e.target) && e.target !== pane.lockBtn) { closeCertPop(); document.removeEventListener('mousedown', h); } }), 0);
 }
 
+function closeNavHistPop() { document.querySelectorAll('.navhist-pop').forEach((p) => p.remove()); }
+// Right-click a nav button -> a menu of up to 10 history entries. dir: -1 back (pages behind), +1 forward (ahead).
+async function openNavHistory(pane, dir, btn) {
+  closeNavHistPop(); closeCertPop(); closeShieldsPop(); closeFavPicker();
+  const t = pane.activeTab;
+  if (!t || !t.wcId || !api.navHistory) return;
+  const h = await api.navHistory(t.wcId);
+  if (!h || !h.entries || !h.entries.length) return;
+  const active = h.active;
+  const list = dir < 0
+    ? h.entries.slice(Math.max(0, active - 10), active).reverse()   // nearest previous page first
+    : h.entries.slice(active + 1, active + 11);                     // nearest next page first
+  if (!list.length) return;
+  const pop = document.createElement('div'); pop.className = 'navhist-pop';
+  pop.innerHTML = list.map((e) =>
+    '<button class="navhist-item" data-i="' + e.i + '" title="' + esc(e.url) + '">' + esc(e.title || e.url) + '</button>'
+  ).join('');
+  pane.el.appendChild(pop);
+  const br = btn.getBoundingClientRect(), pr = pane.el.getBoundingClientRect();
+  pop.style.left = Math.max(6, Math.min(br.left - pr.left, pane.el.clientWidth - pop.offsetWidth - 6)) + 'px';
+  pop.style.top = (br.bottom - pr.top + 6) + 'px';
+  pop.addEventListener('click', (ev) => {
+    const item = ev.target.closest('.navhist-item'); if (!item) return;
+    const idx = parseInt(item.dataset.i, 10);
+    if (pane.view) { try { pane.view.goToIndex(idx); } catch (e) { /* webview may be detached */ } }
+    closeNavHistPop();
+  });
+  setTimeout(() => document.addEventListener('mousedown', function hh(e) { if (!pop.contains(e.target) && e.target !== btn) { closeNavHistPop(); document.removeEventListener('mousedown', hh); } }), 0);
+}
+
 const BAR = `
   <div class="bar">
     <button class="nav back" title="Back">&#8249;</button>
@@ -322,6 +352,8 @@ function makePane(url, beforeEl = null, tabUrls = null) {
   el.addEventListener('mousedown', () => { activePane = pane; markActive(); }, true);
   el.querySelector('.back').addEventListener('click', () => { if (pane.view && pane.view.canGoBack()) pane.view.goBack(); });
   el.querySelector('.fwd').addEventListener('click', () => { if (pane.view && pane.view.canGoForward()) pane.view.goForward(); });
+  el.querySelector('.back').addEventListener('contextmenu', (e) => { e.preventDefault(); activePane = pane; markActive(); openNavHistory(pane, -1, e.currentTarget); });
+  el.querySelector('.fwd').addEventListener('contextmenu', (e) => { e.preventDefault(); activePane = pane; markActive(); openNavHistory(pane, 1, e.currentTarget); });
   el.querySelector('.reload').addEventListener('click', () => pane.view && pane.view.reload());
   el.querySelector('.split').addEventListener('click', () => { const p = makePane(SETTINGS.home, el.nextElementSibling); rebuildGutters(); saveSession(); p.addr.focus(); });
   el.querySelector('.close').addEventListener('click', () => requestClosePane(pane));
@@ -480,7 +512,7 @@ function addTab(pane, url) {
     else if (e.channel === 'vault:loginfocus') Vault.offerFill(pane, e.args[0]); // login field focused -> "prefill?"
     else if (e.channel === 'vault:newpw') Vault.offerSuggest(pane, e.args[0]);   // new-password field -> "suggest a strong one"
     else if (e.channel === 'vault:loginblur') Vault.hideFill(pane);
-    else if (e.channel === 'pane-active') { activePane = pane; markActive(); closeCertPop(); closeShieldsPop(); closeFavPicker(); }   // clicked into a pane -> focus it + dismiss host popovers (webview clicks never reach the document's outside-close)
+    else if (e.channel === 'pane-active') { activePane = pane; markActive(); closeCertPop(); closeShieldsPop(); closeFavPicker(); closeNavHistPop(); }   // clicked into a pane -> focus it + dismiss host popovers (webview clicks never reach the document's outside-close)
     else if (e.channel === 'zoom-wheel') { pane.setZoom(pane.zoom + ((e.args && e.args[0]) > 0 ? 0.1 : -0.1)); }   // Ctrl+scroll zoom
   });
   tfav.addEventListener('error', () => { tfav.hidden = true; });

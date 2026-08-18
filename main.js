@@ -222,6 +222,18 @@ ipcMain.handle('shields:toggleSite', (_e, host) => {   // returns new on-state f
 });
 ipcMain.handle('shields:toggleAll', () => { shieldsOn = !shieldsOn; persistShields(); return shieldsOn; });
 
+// Navigation history for a pane's active webview -- powers the right-click menu on the back/fwd buttons.
+// The <webview> tag can't list entries; only webContents.navigationHistory can. Never let it throw.
+ipcMain.handle('nav:history', (_e, wcId) => {
+  try {
+    const wc = wcId ? webContents.fromId(wcId) : null;
+    if (!wc || wc.isDestroyed()) return null;
+    const nh = wc.navigationHistory;
+    const entries = nh.getAllEntries().map((en, i) => ({ i, url: en.url, title: en.title || '' }));
+    return { entries, active: nh.getActiveIndex() };
+  } catch (e) { return null; }
+});
+
 // ---- HTTP Basic/Digest auth: forward the challenge to an in-app dialog, then answer it ----
 const pendingAuth = new Map();
 const mainNavOrigin = new Map();                 // webContents.id -> origin of its last top-level navigation

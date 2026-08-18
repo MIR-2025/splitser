@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('splitAPI', {
 
   // shields (ad/tracker blocking)
   shieldsGet: (wcId) => ipcRenderer.invoke('shields:get', wcId),
+  navHistory: (wcId) => ipcRenderer.invoke('nav:history', wcId),
   shieldsToggleSite: (host) => ipcRenderer.invoke('shields:toggleSite', host),
   shieldsToggleAll: () => ipcRenderer.invoke('shields:toggleAll'),
 
