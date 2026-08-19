@@ -8,10 +8,11 @@ page on splitser.org tracks the per-release, per-artifact verification status.
 
 ## 0.1.26 — 2026-08-19
 ### Added
-- **Workspace activity badges.** When a page changes -- a new title or a navigation -- in a workspace that
-  isn't the one on screen, its pill in the Workspaces bar gets a pulsing dot so you know something happened
-  there. Visiting the workspace clears it. Initial page loads don't trigger it (a tab only starts flagging
-  after its first load settles), so the badge means a real change, not just "a page loaded."
+- **Workspace activity badges.** When pages change -- new titles or navigations -- in a workspace that
+  isn't the one on screen, its pill in the Workspaces bar shows a **count** of how many changes happened
+  there. Visiting the workspace clears it. Initial page loads don't count (a tab only starts counting after
+  its first load settles), and rapid title changes from a single tab are coalesced (~2s) so a page that
+  rewrites its title constantly can't inflate the number.
 
 ## 0.1.25 — 2026-08-19
 ### Fixed

@@ -35,10 +35,9 @@ body{
   border-radius:6px; border:1px solid var(--line); background:var(--field); color:var(--muted); cursor:pointer; font-size:12px; }
 .setpill:hover{ color:var(--text); border-color:var(--line-2); }
 .setpill.on{ background:var(--field-focus); color:var(--text); border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
-.setpill.unseen{ border-color:var(--accent); }   /* a page changed in this workspace while you were elsewhere */
-.set-badge{ flex:0 0 auto; width:7px; height:7px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 2px var(--field); }
-@media (prefers-reduced-motion: no-preference){ .set-badge{ animation:setpulse 2.2s ease-in-out infinite; } }
-@keyframes setpulse{ 0%,100%{ opacity:1; transform:scale(1) } 50%{ opacity:.5; transform:scale(.82) } }
+.setpill.unseen{ border-color:var(--accent); }   /* pages changed in this workspace while you were elsewhere */
+.set-badge{ flex:0 0 auto; min-width:16px; height:16px; padding:0 4px; border-radius:8px; background:var(--accent); color:#05130a;
+  font-size:10px; font-weight:700; line-height:16px; text-align:center; font-variant-numeric:tabular-nums; box-shadow:0 0 0 2px var(--field); }
 .setname{ max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#fff; }
 .setname-edit{ height:18px; width:110px; background:var(--field); color:var(--text); border:1px solid var(--accent);
   border-radius:4px; padding:0 5px; font-size:12px; outline:none; }
