@@ -6,14 +6,26 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
-## 0.1.25 — 2026-08-18
+## 0.1.25 — 2026-08-19
 ### Fixed
-- **RPM/DEB upgrades no longer fail on the post-remove scriptlet.** The package registers its launcher
+- **RPM post-remove scriptlet no longer fails the transaction.** The package registers its launcher
   through `update-alternatives`, but shipped electron-builder's default post-remove, which tried to remove
   a different alternative path than the one installed -- so on upgrade it errored (`/usr/bin/splitser has
   not been configured as an alternative for splitser`) and, on Fedora's dnf5, failed the whole transaction.
   A custom post-remove now removes the exact alternative that was installed, only on a real uninstall (not
   an upgrade, where the new package owns it), and never exits non-zero.
+
+  **This takes effect from the _next_ upgrade, not this one.** On any upgrade it's the *outgoing* package's
+  post-remove that runs -- so anyone already on 0.1.21–0.1.24 still hits the old broken scriptlet once when
+  upgrading to 0.1.25. 0.1.25 is the last version that *triggers* the error, the first that no longer *ships*
+  it. It's **RPM-only**: Debian's `update-alternatives` ignores an unregistered path and exits 0, so `.deb`
+  upgrades were never affected. One-time recovery on Fedora -- clear the old package without running its
+  scriptlet, then install fresh:
+
+  ```
+  sudo rpm -e --noscripts splitser
+  sudo dnf install ./Splitser-0.1.25-x86_64.rpm
+  ```
 
 ## 0.1.24 — 2026-08-18
 ### Changed
