@@ -6,6 +6,15 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.25 — 2026-08-18
+### Fixed
+- **RPM/DEB upgrades no longer fail on the post-remove scriptlet.** The package registers its launcher
+  through `update-alternatives`, but shipped electron-builder's default post-remove, which tried to remove
+  a different alternative path than the one installed -- so on upgrade it errored (`/usr/bin/splitser has
+  not been configured as an alternative for splitser`) and, on Fedora's dnf5, failed the whole transaction.
+  A custom post-remove now removes the exact alternative that was installed, only on a real uninstall (not
+  an upgrade, where the new package owns it), and never exits non-zero.
+
 ## 0.1.24 — 2026-08-18
 ### Changed
 - **macOS builds are now signed with a Developer ID and notarized by Apple.** The `.dmg` runs the app under
