@@ -6,6 +6,13 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.26 — 2026-08-19
+### Added
+- **Workspace activity badges.** When a page changes -- a new title or a navigation -- in a workspace that
+  isn't the one on screen, its pill in the Workspaces bar gets a pulsing dot so you know something happened
+  there. Visiting the workspace clears it. Initial page loads don't trigger it (a tab only starts flagging
+  after its first load settles), so the badge means a real change, not just "a page loaded."
+
 ## 0.1.25 — 2026-08-19
 ### Fixed
 - **RPM post-remove scriptlet no longer fails the transaction.** The package registers its launcher

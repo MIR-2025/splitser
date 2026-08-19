@@ -279,6 +279,7 @@ function makePane(url, beforeEl = null, tabUrls = null) {
   };
   pane.incognito = !!(cur && cur.incognito);   // private-workspace panes: ephemeral session, no history
   panes.push(pane);
+  pane.set = cur;                                    // owning workspace, for background-activity badges
 
   pane.syncAddr = () => { const u = pane.view && pane.view.getURL(); if (u && u !== 'about:blank' && document.activeElement !== addr) addr.value = u; };
   pane.refreshStar = async () => {
@@ -538,14 +539,14 @@ function addTab(pane, url) {
   };
   tab.syncFav = syncFav;
 
-  view.addEventListener('did-navigate', () => { tab.url = view.getURL(); tab.realFavicon = ''; tab.drm = isDrmHost(tab.url); tab.certError = null; syncFav(); if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); pane.syncDrmNote(); pane.syncCertError(); pane.updateLock(); } saveSession(); });
+  view.addEventListener('did-navigate', () => { tab.url = view.getURL(); tab.realFavicon = ''; tab.drm = isDrmHost(tab.url); tab.certError = null; if (tab.settled) flagUnseen(pane); tab.settled = false; syncFav(); if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); pane.syncDrmNote(); pane.syncCertError(); pane.updateLock(); } saveSession(); });
   view.addEventListener('did-navigate-in-page', () => { tab.url = view.getURL(); if (active()) pane.syncAddr(); });
   view.addEventListener('dom-ready', () => { try { tab.wcId = view.getWebContentsId(); } catch (e) { /* not attached yet */ } if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); pane.refreshShield(); } });
   view.addEventListener('did-start-loading', () => { tab.loading = true; tab.drm = false; try { tab.wcId = view.getWebContentsId(); } catch (e) { /* not attached yet */ } tab.certError = null; tabEl.classList.add('loading'); if (active()) { pane.spin.hidden = false; pane.syncDrmNote(); pane.syncCertError(); } });
-  view.addEventListener('did-stop-loading', () => { tab.loading = false; tabEl.classList.remove('loading'); if (active()) { pane.spin.hidden = true; pane.syncAddr(); } const u = view.getURL(); if (/^https?:/.test(u) && !pane.incognito) api.historyAdd({ url: u, title: tab.title });
+  view.addEventListener('did-stop-loading', () => { tab.loading = false; tab.settled = true; tabEl.classList.remove('loading'); if (active()) { pane.spin.hidden = true; pane.syncAddr(); } const u = view.getURL(); if (/^https?:/.test(u) && !pane.incognito) api.historyAdd({ url: u, title: tab.title });
     if (/^file:\/\/.*\.(md|markdown)(\?|#|$)/i.test(u)) view.executeJavaScript('(' + mdViewerInject.toString() + ')()').catch(() => {});   // render local markdown
     else if (/^file:\/\//i.test(u) || /\.(txt|text|log|csv|tsv|json|xml|ya?ml|ini|conf|cfg|md5|sha\d*sums?)(\?|#|$)/i.test(u)) view.executeJavaScript('(' + plainTextThemeInject.toString() + ')()').catch(() => {}); });   // make raw text/plain readable
-  view.addEventListener('page-title-updated', (e) => { tab.title = e.title || tab.url; ttitle.textContent = tab.title; tabEl.title = tab.title; if (active()) updateTitle(); });
+  view.addEventListener('page-title-updated', (e) => { tab.title = e.title || tab.url; ttitle.textContent = tab.title; tabEl.title = tab.title; if (active()) updateTitle(); if (tab.settled) flagUnseen(pane); });
   view.addEventListener('page-favicon-updated', (e) => { const f = (e.favicons || [])[0]; if (f) tab.realFavicon = f; syncFav(); });
   view.addEventListener('update-target-url', (e) => { hoverEl.textContent = e.url || ''; });
   view.addEventListener('found-in-page', (e) => { if (active()) { const r = e.result; pane.findCount.textContent = r.matches ? r.activeMatchOrdinal + '/' + r.matches : 'no matches'; } });
@@ -950,12 +951,20 @@ function openPaneBelow() { splitFocused('col'); }   // Ctrl+Shift+O: new pane be
 function createSet() {
   const el = document.createElement('div'); el.className = 'gridset'; el.style.display = 'none';
   gridRoot.appendChild(el);
-  const s = { el, panes: [], activePane: null, layout: 'cols', gCols: [], gRows: [], name: '', theme: null, incognito: false };
+  const s = { el, panes: [], activePane: null, layout: 'cols', gCols: [], gRows: [], name: '', theme: null, incognito: false, unseen: false };
   sets.push(s); return s;
 }
 function bindCur(s) { cur = s; grid = s.el; panes = s.panes; activePane = s.activePane; currentLayout = s.layout; }
+// a page changed in a workspace that isn't the one on screen -> badge its pill until you visit it
+function flagUnseen(pane) {
+  const s = pane && pane.set;
+  if (!s || s === cur || s.unseen) return;
+  s.unseen = true;
+  if (!document.querySelector('.setname-edit')) renderSetbar();   // don't clobber an in-progress rename
+}
 function switchSet(s) {
   if (!s) return;
+  s.unseen = false;                                    // visiting a workspace clears its badge
   if (cur) cur.activePane = activePane;                 // persist the mirror to the outgoing set
   bindCur(s);
   sets.forEach((x) => { x.el.style.display = (x === s) ? '' : 'none'; });
@@ -1049,8 +1058,10 @@ function renderSetbar() {   // the "Workspaces" bar: named pills that wrap acros
   const pills = sets.map((s, i) => {
     const fav = s.panes.map((p) => p.activeTab && p.activeTab.favicon).find(Boolean);
     const name = setName(s, i);
-    return '<span class="setpill' + (s === cur ? ' on' : '') + (s.incognito ? ' incognito' : '') + '" data-i="' + i + '" title="' + esc(name).replace(/"/g, '&quot;') + (s.incognito ? ' (private -- nothing saved)' : '') + '">' +
+    const unseen = s.unseen && s !== cur;
+    return '<span class="setpill' + (s === cur ? ' on' : '') + (s.incognito ? ' incognito' : '') + (unseen ? ' unseen' : '') + '" data-i="' + i + '" title="' + esc(name).replace(/"/g, '&quot;') + (s.incognito ? ' (private -- nothing saved)' : '') + (unseen ? ' -- a page changed here' : '') + '">' +
       (s.incognito ? '<span class="setinc-ico">&#128374;</span>' : (fav ? '<img class="setfav" src="' + fav.replace(/"/g, '&quot;') + '" alt="" />' : '<span class="setfav-none">&#127760;</span>')) +
+      (unseen ? '<span class="set-badge"></span>' : '') +
       '<span class="setname">' + esc(name) + '</span>' +
       '<button class="setedit" data-i="' + i + '" title="Rename workspace">&#9998;</button>' +
       (sets.length > 1 ? '<button class="setclose" data-i="' + i + '" title="Close workspace">&#215;</button>' : '') +
