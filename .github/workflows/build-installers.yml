@@ -32,8 +32,8 @@ jobs:
             artifact: macos-x64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 26          # newest LTS line (v26, Active LTS 2026-10-28); v25 is odd/EOL -- skip it
       - name: Pin npm (avoid the broken npm@12 line)
@@ -60,7 +60,7 @@ jobs:
           APPLE_ID: ${{ startsWith(matrix.os, 'macos') && secrets.SPLITSER_APPLE_ID || '' }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ startsWith(matrix.os, 'macos') && secrets.SPLITSER_APPLE_APP_PASSWORD || '' }}
           APPLE_TEAM_ID: ${{ startsWith(matrix.os, 'macos') && secrets.SPLITSER_APPLE_TEAM_ID || '' }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: splitser-${{ matrix.artifact }}
           if-no-files-found: ignore
@@ -81,11 +81,11 @@ jobs:
       contents: write            # let GITHUB_TOKEN create the release + upload assets
     steps:
       - name: Download all built installers
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: dist
       - name: Publish GitHub Release with the installers attached
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/**/*.deb
