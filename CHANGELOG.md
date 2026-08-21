@@ -6,27 +6,6 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
-## 0.1.27 — 2026-08-21
-### Added
-- **Geolocation now works** (it couldn't before). Prebuilt Electron ships no Google geolocation key, so the
-  browser could never return a position. Splitser now backfills `navigator.geolocation` with a coarse,
-  IP-based location (city-level) fetched keyless in the main process -- mirroring how Brave falls back on
-  Linux. The page never contacts the geolocation service itself; each site asks once (**Allow** / **Block**),
-  and that choice is remembered across restarts.
-- **Inspect inside the pane.** The right-click menu now offers *Inspect element* (DevTools docked in the
-  pane) and *Inspect in a new tab* (DevTools rendered into a fresh tab in the same pane), instead of only a
-  separate floating window.
-- **Switch workspaces from the keyboard.** **Ctrl+Tab** moves to the next workspace (wrapping past the last
-  to the first); **Ctrl+Shift+Tab** moves to the previous (wrapping to the last).
-
-### Fixed
-- **Closing a pane no longer leaks its page.** A pane/tab's WebContents (and any DevTools open on it) is now
-  destroyed on close. Previously an open DevTools pinned the page, so it kept running in the background --
-  the "DevTools window stays open after its pane is gone" symptom, and orphaned renderer processes with it.
-- **`navigator.permissions.query()` no longer reports promptable permissions as denied.** Sites that
-  pre-check geolocation / camera / etc. before requesting used to give up early; now the async prompt gets
-  its chance.
-
 ## 0.1.26 — 2026-08-19
 ### Added
 - **Workspace activity badges.** When pages change -- new titles or navigations -- in a workspace that
