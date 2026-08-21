@@ -3,7 +3,14 @@
 // password} up to the host via sendToHost, so the vault (which holds the key, over in the host
 // renderer) can OFFER to save it. Nothing is stored here; it reports the current form once and
 // is otherwise inert. Wrapped in try/catch throughout so it can never break a page.
-const { ipcRenderer } = require('electron');
+const { ipcRenderer, contextBridge } = require('electron');
+
+// Keyless geolocation bridge: the injected main-world shim (see main.js GEO_SHIM) calls this to
+// fetch a coarse, IP-based position from MAIN. Electron ships no Google geolocation key, so the
+// native provider returns POSITION_UNAVAILABLE; this backfills it. Exposed to the page's world.
+try {
+  contextBridge.exposeInMainWorld('__splitGeo', { get: (opts) => ipcRenderer.invoke('geo:get', opts || {}) });
+} catch (e) { /* never break the page */ }
 
 let lastSent = '';
 

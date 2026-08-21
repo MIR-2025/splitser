@@ -121,6 +121,36 @@ function wireShortcuts(contents) {
   });
 }
 
+// ---- Keyless geolocation (Brave-style). Prebuilt Electron has no Google geolocation key, so
+// Chromium's network provider returns POSITION_UNAVAILABLE. We backfill navigator.geolocation in
+// each page with a coarse, IP-based position fetched in MAIN -- no key, and the page never contacts
+// the geoip host itself (no page CSP issue, nothing leaked beyond the IP the site already sees). ----
+const GEOIP_URL = 'https://ipwho.is/';   // keyless, HTTPS, city-level. Point at a self-hosted endpoint
+                                        // (Brave uses its own location.brave.com) to keep it fully private.
+let geoCache = null, geoAt = 0;
+async function geoipLookup() {
+  if (geoCache && Date.now() - geoAt < 10 * 60 * 1000) return geoCache;   // IP location is stable -- cache 10 min
+  const r = await fetch(GEOIP_URL, { headers: { accept: 'application/json' } });
+  if (!r.ok) throw new Error('geoip http ' + r.status);
+  const d = await r.json();
+  if (d && d.success === false) throw new Error('geoip: ' + (d.message || 'lookup failed'));
+  const lat = Number(d.latitude), lng = Number(d.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new Error('geoip: no coords');
+  geoCache = { latitude: lat, longitude: lng, accuracy: 25000 };   // ~city radius, metres
+  geoAt = Date.now();
+  return geoCache;
+}
+const geoConsent = new Map();   // origin -> boolean; ask once per origin (session-scoped)
+// Injected into every page's MAIN world via executeJavaScript (not a <script> tag, so CSP script-src
+// can't block it): replace navigator.geolocation to route through the __splitGeo bridge.
+const GEO_SHIM = "(function(){try{if(!navigator.geolocation||!window.__splitGeo)return;" +
+  "var mk=function(p){return {coords:{latitude:p.latitude,longitude:p.longitude,accuracy:p.accuracy,altitude:null,altitudeAccuracy:null,heading:null,speed:null},timestamp:Date.now()};};" +
+  "var er=function(e){var m=(e&&e.message)||'';var c=/PERMISSION_DENIED/.test(m)?1:(/TIMEOUT/.test(m)?3:2);return {code:c,message:m||'position unavailable',PERMISSION_DENIED:1,POSITION_UNAVAILABLE:2,TIMEOUT:3};};" +
+  "var get=function(s,e,o){window.__splitGeo.get(o||{}).then(function(p){s&&s(mk(p));},function(x){e&&e(er(x));});};" +
+  "navigator.geolocation.getCurrentPosition=get;var w=0;" +
+  "navigator.geolocation.watchPosition=function(s,e,o){get(s,e,o);return ++w;};" +
+  "navigator.geolocation.clearWatch=function(){};}catch(e){}})();";
+
 function createWindow() {
   const winOpts = {
     width: 1500, height: 940, backgroundColor: '#0e1418', title: 'Splitser',
@@ -163,6 +193,10 @@ function createWindow() {
     webPreferences.webSecurity = true;
     webPreferences.plugins = true;   // enable Chromium's built-in (pdfium) PDF viewer -- view PDFs inline, not download
     if (params) { delete params.nodeintegration; delete params.nodeintegrationinsubframes; delete params.webpreferences; delete params.disablewebsecurity; delete params.plugins; }
+  });
+  // backfill navigator.geolocation in each pane's page (re-inject on every load, main world)
+  win.webContents.on('did-attach-webview', (_e, wc) => {
+    wc.on('dom-ready', () => { wc.executeJavaScript(GEO_SHIM).catch(() => {}); });
   });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   // the privileged host frame holds splitAPI -> the vault; it must never leave its local page
@@ -220,6 +254,24 @@ ipcMain.on('devtools:attach', (_e, { targetId, hostId, x, y }) => {
 ipcMain.on('devtools:close', (_e, targetId) => {   // the DevTools host tab was closed -> detach DevTools from the target (target keeps running)
   const target = targetId ? webContents.fromId(targetId) : null;
   if (target && !target.isDestroyed()) { try { target.closeDevTools(); } catch (e) {} }
+});
+ipcMain.handle('geo:get', async (e) => {   // coarse IP-based position for the geolocation shim (no Google key)
+  const origin = (() => { try { return new URL(e.sender.getURL()).origin; } catch (x) { return ''; } })();
+  let ok = geoConsent.get(origin);
+  if (ok === undefined) {
+    if (process.env.SPLITSER_GEO_TEST === '1') ok = true;   // test seam: skip the modal in headless runs
+    else {
+      const { response } = await dialog.showMessageBox(win, {
+        type: 'question', buttons: ['Block', 'Allow'], defaultId: 0, cancelId: 0,
+        title: 'Splitser', message: 'Allow ' + (origin || 'this site') + ' to access your location?',
+        detail: 'Splitser provides a coarse, IP-based location (no GPS, no Google).'
+      });
+      ok = response === 1;
+    }
+    geoConsent.set(origin, ok);
+  }
+  if (!ok) throw new Error('PERMISSION_DENIED');
+  try { return await geoipLookup(); } catch (err) { throw new Error('POSITION_UNAVAILABLE'); }
 });
 ipcMain.on('open-downloads', () => shell.openPath(app.getPath('downloads')));
 ipcMain.on('download:open', (_e, p) => { if (dlPaths.has(p)) shell.openPath(p); });
@@ -353,7 +405,11 @@ app.whenReady().then(() => {
       });
       callback(response === 1);
     });
-    ses.setPermissionCheckHandler((_wc, permission) => AUTO_ALLOW.has(permission));   // gates clipboard-read etc.
+    // Auto-allowed perms pass the sync check; PROMPT perms also pass it so navigator.permissions.query()
+    // reports them as available (not 'denied') and the ASYNC request handler above gets to prompt --
+    // otherwise a site that pre-checks (e.g. geolocation) gives up before ever requesting. Everything
+    // else (clipboard-read, display-capture, usb/serial/hid, ...) still fails the check -> denied.
+    ses.setPermissionCheckHandler((_wc, permission) => AUTO_ALLOW.has(permission) || PROMPT.has(permission));
     // Observe only: cache each host's leaf cert for the address-bar badge, then DEFER the trust decision
     // to Chromium (cb(-3)) so this never weakens verification (a bad cert is still blocked as before).
     ses.setCertificateVerifyProc((req, cb) => {
