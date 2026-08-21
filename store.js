@@ -123,6 +123,12 @@ let downloadDirs = load('download-dirs.json', {});
 export function getDownloadDir(host) { return host ? (downloadDirs[host] || '') : ''; }
 export function setDownloadDir(host, dir) { if (host && dir) { downloadDirs[host] = dir; saveNow('download-dirs.json', downloadDirs); } }
 
+// ---- geolocation consent: per-origin Allow/Block, remembered so we ask once and it survives
+// restarts. { origin: true|false }. Returns undefined when the origin hasn't been asked yet. ----
+let geoConsent = load('geo-consent.json', {});
+export function getGeoConsent(origin) { return (origin && Object.prototype.hasOwnProperty.call(geoConsent, origin)) ? geoConsent[origin] : undefined; }
+export function setGeoConsent(origin, allow) { if (origin) { geoConsent[origin] = !!allow; saveNow('geo-consent.json', geoConsent); } }
+
 // ---- vault: ciphertext blob only. Main NEVER sees the key, master password, or
 // plaintext -- all crypto happens in the isolated renderer. ----
 export function getVault() { return load('vault.enc', null); }
@@ -137,4 +143,5 @@ export function clearData(kind) {
   if (kind === 'history' || kind === 'all') { history = []; saveNow('history.json', history); }
   if (kind === 'bookmarks' || kind === 'all') { bookmarks = []; saveNow('bookmarks.json', bookmarks); bmFolders = []; saveNow('bookmark-folders.json', bmFolders); }
   if (kind === 'session' || kind === 'all') { session = []; saveNow('session.json', session); }
+  if (kind === 'all') { geoConsent = {}; saveNow('geo-consent.json', geoConsent); }
 }

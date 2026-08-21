@@ -140,7 +140,6 @@ async function geoipLookup() {
   geoAt = Date.now();
   return geoCache;
 }
-const geoConsent = new Map();   // origin -> boolean; ask once per origin (session-scoped)
 // Injected into every page's MAIN world via executeJavaScript (not a <script> tag, so CSP script-src
 // can't block it): replace navigator.geolocation to route through the __splitGeo bridge.
 const GEO_SHIM = "(function(){try{if(!navigator.geolocation||!window.__splitGeo)return;" +
@@ -257,7 +256,7 @@ ipcMain.on('devtools:close', (_e, targetId) => {   // the DevTools host tab was 
 });
 ipcMain.handle('geo:get', async (e) => {   // coarse IP-based position for the geolocation shim (no Google key)
   const origin = (() => { try { return new URL(e.sender.getURL()).origin; } catch (x) { return ''; } })();
-  let ok = geoConsent.get(origin);
+  let ok = store.getGeoConsent(origin);   // remembered per origin, persisted across restarts
   if (ok === undefined) {
     if (process.env.SPLITSER_GEO_TEST === '1') ok = true;   // test seam: skip the modal in headless runs
     else {
@@ -268,7 +267,7 @@ ipcMain.handle('geo:get', async (e) => {   // coarse IP-based position for the g
       });
       ok = response === 1;
     }
-    geoConsent.set(origin, ok);
+    store.setGeoConsent(origin, ok);
   }
   if (!ok) throw new Error('PERMISSION_DENIED');
   try { return await geoipLookup(); } catch (err) { throw new Error('POSITION_UNAVAILABLE'); }
