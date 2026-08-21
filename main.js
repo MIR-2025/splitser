@@ -100,7 +100,10 @@ function buildContextMenu(contents, p) {
     t.push({ label: 'Search for “' + q + '”', click: () => send('open-pane', searchUrl) });
   }
   t.push({ type: 'separator' });
-  t.push({ label: 'Inspect element', click: () => contents.inspectElement(p.x, p.y) });
+  // Docked: DevTools opens inside the pane's own view area, not a floating window.
+  t.push({ label: 'Inspect element', click: () => { try { contents.openDevTools({ mode: 'bottom' }); } catch (e) {} contents.inspectElement(p.x, p.y); } });
+  // In a tab: the renderer opens a fresh tab in this pane to host the DevTools (setDevToolsWebContents).
+  t.push({ label: 'Inspect in a new tab', click: () => send('open-devtools-tab', { targetWcId: contents.id, x: p.x, y: p.y }) });
   return Menu.buildFromTemplate(t);
 }
 
@@ -199,6 +202,25 @@ const dlPaths = new Set();   // full paths of files we've saved -- open/reveal i
 ipcMain.on('app:home', (e) => { e.returnValue = app.getPath('home'); });   // sync home dir for the sandboxed preload
 ipcMain.on('app:version', (e) => { e.returnValue = app.getVersion(); });   // sync app version for the About popover
 ipcMain.on('app:ready', () => { if (pendingUrl && win && !win.isDestroyed()) { win.webContents.send('open-pane', pendingUrl); pendingUrl = ''; } });   // renderer restore done -> open a launch URL
+ipcMain.on('destroy-wc', (_e, id) => {   // a pane/tab was closed -> definitively tear down its guest WebContents (+ any open DevTools)
+  const wc = id ? webContents.fromId(id) : null;                 // detaching the <webview> alone leaks the guest when DevTools has it pinned
+  if (wc && !wc.isDestroyed()) { try { wc.closeDevTools(); } catch (e) {} try { wc.destroy(); } catch (e) {} }
+});
+// Render a page's DevTools INTO another WebContents (a fresh host tab in the same pane) instead of a window.
+ipcMain.on('devtools:attach', (_e, { targetId, hostId, x, y }) => {
+  const target = targetId ? webContents.fromId(targetId) : null;
+  const host = hostId ? webContents.fromId(hostId) : null;
+  if (!target || target.isDestroyed() || !host || host.isDestroyed()) return;
+  try {
+    target.setDevToolsWebContents(host);                        // host must be a fresh WebContents (no prior navigation)
+    target.openDevTools();
+    if (x != null && y != null) target.inspectElement(x, y);
+  } catch (e) { console.error('[devtools] attach failed:', e && e.message); }
+});
+ipcMain.on('devtools:close', (_e, targetId) => {   // the DevTools host tab was closed -> detach DevTools from the target (target keeps running)
+  const target = targetId ? webContents.fromId(targetId) : null;
+  if (target && !target.isDestroyed()) { try { target.closeDevTools(); } catch (e) {} }
+});
 ipcMain.on('open-downloads', () => shell.openPath(app.getPath('downloads')));
 ipcMain.on('download:open', (_e, p) => { if (dlPaths.has(p)) shell.openPath(p); });
 ipcMain.on('download:reveal', (_e, p) => { if (dlPaths.has(p)) shell.showItemInFolder(p); });

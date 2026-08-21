@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld('splitAPI', {
   onHttpAuth: (cb) => ipcRenderer.on('http-auth', (_e, d) => cb(d)),
   onOpenTabIn: (cb) => ipcRenderer.on('open-tab-in', (_e, d) => cb(d)),
   onCertError: (cb) => ipcRenderer.on('cert-error', (_e, d) => cb(d)),   // main-frame cert rejected -> show interstitial
+  onOpenDevtoolsTab: (cb) => ipcRenderer.on('open-devtools-tab', (_e, d) => cb(d)),   // "Inspect in a new tab" -> host DevTools in a pane tab
+  devtoolsAttach: (d) => ipcRenderer.send('devtools:attach', d),        // wire target's DevTools into the host tab's WebContents
+  devtoolsClose: (targetWcId) => ipcRenderer.send('devtools:close', targetWcId),   // DevTools host tab closed -> detach from target
 
   // shields (ad/tracker blocking)
   shieldsGet: (wcId) => ipcRenderer.invoke('shields:get', wcId),
@@ -53,6 +56,7 @@ contextBridge.exposeInMainWorld('splitAPI', {
   openDownload: (p) => ipcRenderer.send('download:open', p),      // open a finished download (main validates the path)
   revealDownload: (p) => ipcRenderer.send('download:reveal', p),  // show it in the OS file manager
   clearIncognito: () => ipcRenderer.send('incognito:clear'),      // wipe the ephemeral session
+  destroyWc: (wcId) => ipcRenderer.send('destroy-wc', wcId),      // force-destroy a closed pane/tab's guest WebContents (+ its DevTools)
 
   // vault (main stores only the encrypted blob) + clipboard
   vaultGet: () => ipcRenderer.invoke('vault:get'),

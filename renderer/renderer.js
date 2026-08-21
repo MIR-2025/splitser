@@ -569,6 +569,25 @@ function addTab(pane, url) {
   return tab;
 }
 
+// "Inspect in a new tab": open a fresh tab in `pane` and use ITS WebContents as the host that
+// renders `targetWcId`'s DevTools (main wires it via setDevToolsWebContents). The host must not
+// have navigated before wiring, so attach as soon as the blank host reports a WebContents id.
+function openDevtoolsTab(pane, targetWcId, x, y) {
+  const t = addTab(pane, 'about:blank');
+  t.isDevtools = true; t.devtoolsTarget = targetWcId; t.title = 'DevTools';
+  const label = t.tabEl.querySelector('.tabtitle'); if (label) label.textContent = 'DevTools';
+  t.tabEl.title = 'DevTools'; t.tabEl.classList.add('devtools-tab');
+  const wire = () => {
+    let hostId; try { hostId = t.view.getWebContentsId(); } catch (e) { return false; }
+    if (hostId == null) return false;
+    t.wcId = hostId;
+    api.devtoolsAttach({ targetId: targetWcId, hostId, x, y });
+    return true;
+  };
+  if (!wire()) t.view.addEventListener('dom-ready', function h() { t.view.removeEventListener('dom-ready', h); wire(); });
+  return t;
+}
+
 function switchTab(pane, tab) {
   pane.tabs.forEach((t) => { t.view.style.display = (t === tab) ? '' : 'none'; t.tabEl.classList.toggle('on', t === tab); });
   pane.activeTab = tab;
@@ -580,9 +599,22 @@ function switchTab(pane, tab) {
   pane.refreshStar(); Vault.refreshPaneKey(pane); pane.refreshShield(); pane.syncDrmNote(); pane.syncCertError(); pane.updateLock(); updateTitle();
 }
 
+// Force-destroy a tab's guest WebContents on close. Detaching the <webview> from the DOM is
+// SUPPOSED to destroy the guest, but an open DevTools pins it -- so the guest (renderer process,
+// memory, timers, media) and its DevTools window both leak. We already track wcId (dom-ready /
+// did-start-loading); tell main to destroy it outright. Call this before removing the element.
+function teardownTab(tab) {
+  if (!tab) return;
+  if (tab.isDevtools && tab.devtoolsTarget != null && api.devtoolsClose) api.devtoolsClose(tab.devtoolsTarget);   // detach DevTools from the still-live target
+  let id = tab.wcId;
+  if (id == null) { try { id = tab.view.getWebContentsId(); } catch (e) { id = null; } }
+  if (id != null && api.destroyWc) api.destroyWc(id);
+}
+
 function closeTab(pane, tab) {
   if (pane.tabs.length <= 1) { closePane(pane); return; }
   const i = pane.tabs.indexOf(tab);
+  teardownTab(tab);
   tab.view.remove(); tab.tabEl.remove(); pane.tabs.splice(i, 1);
   pane.el.classList.toggle('multitab', pane.tabs.length > 1);
   if (pane.activeTab === tab) switchTab(pane, pane.tabs[Math.min(i, pane.tabs.length - 1)]);
@@ -623,7 +655,7 @@ function closePane(pane) {
     pane.view.loadURL(SETTINGS.home); return;        // ...or just resets it (last pane of last set)
   }
   const i = panes.indexOf(pane);
-  panes.splice(i, 1); pane.el.remove();
+  panes.splice(i, 1); pane.tabs.forEach(teardownTab); pane.el.remove();
   if (activePane === pane) activePane = panes[Math.min(i, panes.length - 1)] || null;
   if (cur.split) {                                   // in a split tree: drop the leaf, collapse its parent
     cur.split = st_removeLeaf(cur.split, pane);
@@ -789,7 +821,7 @@ function startGridDragXY(e, ci, ri) {
 function setPaneCount(n) {
   while (panes.length < n) makePane(SETTINGS.home);
   while (panes.length > n && panes.length > 1) {
-    const p = panes.pop(); p.el.remove();
+    const p = panes.pop(); p.tabs.forEach(teardownTab); p.el.remove();
     if (activePane === p) activePane = panes[panes.length - 1] || null;
   }
 }
@@ -1001,7 +1033,7 @@ function newIncognitoSet() {   // a private workspace: ephemeral 'split-incognit
 function closeSet(s) {
   if (sets.length <= 1) return;
   const wasIncognito = s.incognito;
-  const i = sets.indexOf(s); s.el.remove(); sets.splice(i, 1);
+  const i = sets.indexOf(s); s.panes.forEach((p) => p.tabs.forEach(teardownTab)); s.el.remove(); sets.splice(i, 1);
   if (cur === s) { cur = null; switchSet(sets[Math.min(i, sets.length - 1)]); }
   else renderSetbar();
   if (wasIncognito && !sets.some((x) => x.incognito)) api.clearIncognito();   // last private workspace closed -> wipe
@@ -1159,6 +1191,7 @@ api.onCertError((d) => { for (const s of sets) for (const p of s.panes) for (con
 
 // "Open link in new tab" from the context menu -> a tab in the pane that was right-clicked
 api.onOpenTabIn((d) => { for (const s of sets) for (const p of s.panes) { if (p.activeTab && p.activeTab.wcId === d.wcId) { activePane = p; addTab(p, d.url); return; } } });
+api.onOpenDevtoolsTab((d) => { for (const s of sets) for (const p of s.panes) { if (p.activeTab && p.activeTab.wcId === d.targetWcId) { activePane = p; openDevtoolsTab(p, d.targetWcId, d.x, d.y); return; } } });
 
 // HTTP Basic/Digest auth: a site (or dev server) asked for credentials
 api.onHttpAuth((d) => showAuthDialog(d));
