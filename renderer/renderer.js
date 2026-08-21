@@ -999,6 +999,13 @@ function flagUnseen(pane, tab) {
   s.unseen = (s.unseen || 0) + 1;
   if (!document.querySelector('.setname-edit')) renderSetbar();   // don't clobber an in-progress rename
 }
+function switchWorkspace(dir) {   // Ctrl+Tab / Ctrl+Shift+Tab -- cycle workspaces with wraparound
+  if (sets.length < 2) return;
+  const i = sets.indexOf(cur);
+  switchSet(sets[(i + dir + sets.length) % sets.length]);
+  saveSession();
+}
+
 function switchSet(s) {
   if (!s) return;
   s.unseen = 0;                                        // visiting a workspace clears its badge
@@ -1180,6 +1187,8 @@ function handleShortcut(k) {
   else if (k === '=' || k === '+') { if (p) p.setZoom(p.zoom + 0.1); }
   else if (k === '-') { if (p) p.setZoom(p.zoom - 0.1); }
   else if (k === '0') p?.setZoom(1);
+  else if (k === 'tab') switchWorkspace(1);            // Ctrl+Tab -> next workspace (wraps to first)
+  else if (k === 'shift+tab') switchWorkspace(-1);     // Ctrl+Shift+Tab -> previous workspace (wraps to last)
 }
 api.onShortcut(handleShortcut);
 api.onOpenPane((url) => { const p = makePane(url, active() ? active().el.nextElementSibling : null); rebuildGutters(); saveSession(); activePane = p; });

@@ -109,7 +109,7 @@ function buildContextMenu(contents, p) {
 
 // Shell shortcuts intercepted on every webContents (host + each webview) so they fire even
 // while a page has focus (webview key events don't bubble to the host).
-const SHORTCUTS = new Set(['t', 'w', 'l', 'r', 'f', 'm', 'd', 'k', 'p', '1', '2', '3', '=', '+', '-', '0', 'shift+n', 'shift+d', 'shift+e', 'shift+o']);
+const SHORTCUTS = new Set(['t', 'w', 'l', 'r', 'f', 'm', 'd', 'k', 'p', 'tab', 'shift+tab', '1', '2', '3', '=', '+', '-', '0', 'shift+n', 'shift+d', 'shift+e', 'shift+o']);
 function wireShortcuts(contents) {
   contents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown' || !(input.control || input.meta) || input.alt) return;
