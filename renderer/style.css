@@ -36,6 +36,7 @@ body{
 .setpill:hover{ color:var(--text); border-color:var(--line-2); }
 .setpill.on{ background:var(--field-focus); color:var(--text); border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
 .setpill.unseen{ border-color:var(--accent); }   /* pages changed in this workspace while you were elsewhere */
+.setpill.dragging{ opacity:.55; outline:2px dashed var(--accent); outline-offset:1px; cursor:grabbing; }   /* being reordered */
 .set-badge{ flex:0 0 auto; min-width:16px; height:16px; padding:0 4px; border-radius:8px; background:var(--accent); color:#05130a;
   font-size:10px; font-weight:700; line-height:16px; text-align:center; font-variant-numeric:tabular-nums; box-shadow:0 0 0 2px var(--field); }
 .setname{ max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#fff; }

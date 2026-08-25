@@ -1126,7 +1126,9 @@ function renameSet(s, pill) {
   input.addEventListener('blur', () => commit(true));
   input.addEventListener('click', (e) => e.stopPropagation());
 }
+let pillDragged = false;   // set by a reorder drag so the trailing click doesn't also switchSet
 setbar.addEventListener('click', (e) => {
+  if (pillDragged) { pillDragged = false; return; }   // a pill was just dragged -- swallow its click
   if (e.target.closest('.setbar-logo')) return setLayout('split12', true);   // the logo IS a layout -- apply it
   if (e.target.closest('.setinc')) return newIncognitoSet();
   if (e.target.closest('.setadd')) return newSet();
@@ -1139,6 +1141,47 @@ setbar.addEventListener('click', (e) => {
 setbar.addEventListener('dblclick', (e) => {   // double-click a pill (not its × / ✎) to rename it inline
   const pill = e.target.closest('.setpill');
   if (pill && !e.target.closest('.setclose') && !e.target.closest('.setedit')) renameSet(sets[+pill.dataset.i], pill);
+});
+
+// ---- drag a workspace pill to reorder it. Pure setbar + sets-array reorder: it never touches a
+// pane or <webview>, so page content can't be disturbed. Live preview by moving the pill's DOM node
+// between slots (data-i stays put); on drop we rebuild `sets` from the DOM order and persist it. ----
+function pillDropTarget(cx, cy, dragged) {   // the pill to insert BEFORE (null = after the last pill), honoring row-wrap
+  for (const p of setbar.querySelectorAll('.setpill')) {
+    if (p === dragged) continue;
+    const r = p.getBoundingClientRect();
+    if (cy < r.top) return p;                                    // cursor on an earlier row -> before this pill
+    if (cy <= r.bottom && cx < r.left + r.width / 2) return p;   // same row, left of its middle -> before it
+  }
+  return null;                                                   // past the last pill -> drop at the end
+}
+setbar.addEventListener('mousedown', (e) => {
+  if (e.button !== 0 || sets.length < 2) return;
+  const pill = e.target.closest('.setpill');
+  if (!pill || e.target.closest('.setclose') || e.target.closest('.setedit') || setbar.querySelector('.setname-edit')) return;
+  const sx = e.clientX, sy = e.clientY;
+  let dragging = false, shield = null;
+  const onMove = (ev) => {
+    if (!dragging) {
+      if (Math.abs(ev.clientX - sx) + Math.abs(ev.clientY - sy) < 5) return;   // click threshold
+      dragging = true; pill.classList.add('dragging');
+      shield = document.createElement('div'); shield.className = 'drag-shield'; shield.style.cursor = 'grabbing';
+      document.body.appendChild(shield);
+    }
+    const ref = pillDropTarget(ev.clientX, ev.clientY, pill);
+    setbar.insertBefore(pill, ref || setbar.querySelector('.setadd'));   // live-move into the target slot
+  };
+  const onUp = () => {
+    window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp);
+    if (shield) shield.remove();
+    if (!dragging) return;
+    pill.classList.remove('dragging');
+    const order = [...setbar.querySelectorAll('.setpill')].map((p) => sets[+p.dataset.i]).filter(Boolean);
+    if (order.length === sets.length) { sets.length = 0; sets.push(...order); }   // rebuild sets from DOM order
+    pillDragged = true;                 // swallow the click that fires right after this mouseup
+    renderSetbar(); saveSession();      // re-emit correct data-i + persist the new order
+  };
+  window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
 });
 
 // ---- session persistence ----
