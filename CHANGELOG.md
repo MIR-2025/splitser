@@ -6,6 +6,11 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.32 — 2026-08-25
+### Changed
+- Removed **"Inspect in a new tab"** from the right-click menu. Inspecting is now just
+  **Inspect element** (DevTools in its own window).
+
 ## 0.1.31 — 2026-08-25
 ### Fixed
 - **Inspect element works again.** It had been opening DevTools *docked*, which a pane's web view can't

@@ -104,8 +104,6 @@ function buildContextMenu(contents, p) {
   // A <webview> guest has no window of its own, so a DOCKED ('bottom'/'right') DevTools opens invisibly
   // -- inspect looked broken. 'detach' (a separate DevTools window) works for guests; that's the reliable one.
   t.push({ label: 'Inspect element', click: () => { try { contents.openDevTools({ mode: 'detach' }); } catch (e) {} contents.inspectElement(p.x, p.y); } });
-  // In a tab: the renderer opens a fresh tab in this pane to host the DevTools (setDevToolsWebContents).
-  t.push({ label: 'Inspect in a new tab', click: () => send('open-devtools-tab', { targetWcId: contents.id, x: p.x, y: p.y }) });
   t.push({ type: 'separator' });
   t.push({ label: 'Capture full page', click: () => send('capture-full', { targetWcId: contents.id }) });
   return Menu.buildFromTemplate(t);
