@@ -6,6 +6,15 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.35 — 2026-08-25
+### Changed
+- **Ctrl+T opens a new tab in the current pane again** (standard browser behavior). It had been
+  remapped to "new workspace" when workspaces were added; that was the regression. New workspaces
+  are created with the **"+ Workspace"** button in the Workspaces bar.
+### Added
+- **Ctrl+\ opens a new pane** in the current workspace (splits to the right). (Ctrl+Shift+E / Ctrl+Shift+O
+  still split right / below.)
+
 ## 0.1.34 — 2026-08-25
 ### Changed
 - **Ctrl+Shift+T now reopens a whole closed workspace**, not just individual tabs. Close a workspace

@@ -1243,7 +1243,7 @@ function saveSession() {
 function handleShortcut(k) {
   const p = active();
   if (k === 'l') p?.addr.focus();
-  else if (k === 't') newSet();                                                         // new SET (fresh grid); tabs open via the strip +
+  else if (k === 't') { if (p) { addTab(p, SETTINGS.home); p.addr.focus(); } }          // new TAB in the active pane (browser Ctrl+T); new workspace = "+ Workspace" button
   else if (k === 'shift+t') reopenClosed();                                              // reopen the last closed tab / workspace
   else if (k === 'shift+n') newIncognitoSet();                                          // new PRIVATE workspace
   else if (k === 'w') { if (p && p.activeTab) closeTab(p, p.activeTab); }               // close TAB (last tab -> pane; last pane -> set)
@@ -1257,6 +1257,7 @@ function handleShortcut(k) {
   else if (k === '1') setLayout('cols', false);
   else if (k === '2') setLayout('g2x2', true);
   else if (k === '3') setLayout('g3x3', true);
+  else if (k === '\\') openPaneRight();                                                  // Ctrl+\ -> new pane in the current workspace (split right)
   else if (k === 'shift+e') openPaneRight();                                             // new pane to the right (columns)
   else if (k === 'shift+o') openPaneBelow();                                             // new pane below (vertical stack)
   else if (k === '=' || k === '+') { if (p) p.setZoom(p.zoom + 0.1); }
