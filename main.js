@@ -101,7 +101,9 @@ function buildContextMenu(contents, p) {
   }
   t.push({ type: 'separator' });
   // Docked: DevTools opens inside the pane's own view area, not a floating window.
-  t.push({ label: 'Inspect element', click: () => { try { contents.openDevTools({ mode: 'bottom' }); } catch (e) {} contents.inspectElement(p.x, p.y); } });
+  // A <webview> guest has no window of its own, so a DOCKED ('bottom'/'right') DevTools opens invisibly
+  // -- inspect looked broken. 'detach' (a separate DevTools window) works for guests; that's the reliable one.
+  t.push({ label: 'Inspect element', click: () => { try { contents.openDevTools({ mode: 'detach' }); } catch (e) {} contents.inspectElement(p.x, p.y); } });
   // In a tab: the renderer opens a fresh tab in this pane to host the DevTools (setDevToolsWebContents).
   t.push({ label: 'Inspect in a new tab', click: () => send('open-devtools-tab', { targetWcId: contents.id, x: p.x, y: p.y }) });
   t.push({ type: 'separator' });
@@ -330,30 +332,53 @@ ipcMain.handle('capture:savePdf', async (_e, { dataUrl, width, height } = {}) =>
     filters: [{ name: 'PDF', extensions: ['pdf'] }]
   });
   if (canceled || !filePath) return { ok: false };
-  let off;
   try {
-    off = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true } });   // hidden (not offscreen -- offscreen breaks printToPDF)
-    // Load a blank page, then inject the image and wait for it to decode. We DON'T put the image in
-    // the navigation URL: a big data: image inside a data:/file: URL blows past Chromium's URL-length
-    // limit (ERR_FAILED). executeJavaScript carries the data URL as a string, which has no such cap.
-    await off.loadURL('about:blank');
-    await off.webContents.executeJavaScript(
-      'new Promise(function(res,rej){' +
-      'document.documentElement.style.margin="0";document.body.style.margin="0";' +
-      'var im=new Image();' +
-      'im.onload=function(){im.style.display="block";im.style.width="100%";document.body.appendChild(im);' +
-      '(im.decode?im.decode().then(res,res):res());};' +
-      'im.onerror=function(){rej(new Error("image decode failed"));};' +
-      'im.src=' + JSON.stringify(dataUrl) + ';})'
-    );
-    const microns = (px) => Math.round((px / 96) * 25400);   // CSS px -> microns at 96dpi
-    const pdf = await off.webContents.printToPDF({ printBackground: true, margins: { marginType: 'none' },
-      pageSize: { width: microns(width), height: microns(height) } });
+    // Build the PDF ourselves by embedding the image (JPEG via /DCTDecode) into a one-page PDF sized to
+    // it. We used to use webContents.printToPDF, but that's flaky/undebuggable across environments (it
+    // silently fails to produce a file on some setups). Hand-building is deterministic and testable.
+    const jp = await pngToJpeg(dataUrl);
+    const pdf = buildImagePdf(jp);
     await fs.promises.writeFile(filePath, pdf);
     return { ok: true, path: filePath };
   } catch (e) { return { ok: false, error: e.message }; }
-  finally { if (off && !off.isDestroyed()) off.destroy(); }
 });
+// Re-encode a PNG data URL to JPEG bytes + pixel dims via a hidden-window canvas (no printToPDF).
+async function pngToJpeg(dataUrl) {
+  let off;
+  try {
+    off = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true } });
+    await off.loadURL('about:blank');
+    const res = await off.webContents.executeJavaScript(
+      '(async function(){var im=new Image();await new Promise(function(r){im.onload=r;im.onerror=r;im.src=' + JSON.stringify(dataUrl) + ';});' +
+      'var c=document.createElement("canvas");c.width=im.naturalWidth;c.height=im.naturalHeight;' +
+      'var x=c.getContext("2d");x.fillStyle="#fff";x.fillRect(0,0,c.width,c.height);x.drawImage(im,0,0);' +   // white matte (JPEG has no alpha)
+      'return JSON.stringify({w:c.width,h:c.height,jpeg:c.toDataURL("image/jpeg",0.92)});})()'
+    );
+    const o = JSON.parse(res);
+    if (!o.w || !o.h) throw new Error('could not rasterize image');
+    return { w: o.w, h: o.h, bytes: Buffer.from(o.jpeg.replace(/^data:image\/jpeg;base64,/, ''), 'base64') };
+  } finally { if (off && !off.isDestroyed()) off.destroy(); }
+}
+// Minimal one-page PDF embedding a JPEG (baseline, DeviceRGB). Page sized to the image at 96dpi -> points.
+function buildImagePdf({ w, h, bytes }) {
+  const pw = (w * 72 / 96).toFixed(2), ph = (h * 72 / 96).toFixed(2);
+  const content = 'q ' + pw + ' 0 0 ' + ph + ' 0 0 cm /Im0 Do Q';
+  const imgHead = '<</Type/XObject/Subtype/Image/Width ' + w + '/Height ' + h + '/ColorSpace/DeviceRGB/BitsPerComponent 8/Filter/DCTDecode/Length ' + bytes.length + '>>';
+  const chunks = []; let pos = 0; const off = [];
+  const push = (b) => { const buf = Buffer.isBuffer(b) ? b : Buffer.from(b, 'latin1'); chunks.push(buf); pos += buf.length; };
+  push('%PDF-1.3\n');
+  off[1] = pos; push('1 0 obj\n<</Type/Catalog/Pages 2 0 R>>\nendobj\n');
+  off[2] = pos; push('2 0 obj\n<</Type/Pages/Kids[3 0 R]/Count 1>>\nendobj\n');
+  off[3] = pos; push('3 0 obj\n<</Type/Page/Parent 2 0 R/MediaBox[0 0 ' + pw + ' ' + ph + ']/Resources<</XObject<</Im0 4 0 R>>>>/Contents 5 0 R>>\nendobj\n');
+  off[4] = pos; push('4 0 obj\n' + imgHead + '\nstream\n'); push(bytes); push('\nendstream\nendobj\n');
+  off[5] = pos; push('5 0 obj\n<</Length ' + content.length + '>>\nstream\n' + content + '\nendstream\nendobj\n');
+  const xref = pos;
+  let x = 'xref\n0 6\n0000000000 65535 f \n';
+  for (let i = 1; i <= 5; i++) x += String(off[i]).padStart(10, '0') + ' 00000 n \n';
+  push(x);
+  push('trailer\n<</Size 6/Root 1 0 R>>\nstartxref\n' + xref + '\n%%EOF');
+  return Buffer.concat(chunks);
+}
 
 ipcMain.handle('capture:copy', (_e, { dataUrl } = {}) => {   // put the PNG on the clipboard as an image
   if (!dataUrl) return { ok: false };

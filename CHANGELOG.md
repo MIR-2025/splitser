@@ -6,6 +6,15 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.31 — 2026-08-25
+### Fixed
+- **Inspect element works again.** It had been opening DevTools *docked*, which a pane's web view can't
+  do (it has no window to dock into), so nothing appeared. It now opens DevTools in its own window.
+  ("Inspect in a new tab" still puts DevTools in a pane tab.)
+- **"Save as PDF" from a full-page capture actually saves now.** The old path used Chromium's
+  print-to-PDF, which silently failed on some systems (the save dialog appeared but no file was
+  written). PDFs are now built directly from the captured image, so the file is always written.
+
 ## 0.1.30 — 2026-08-25
 ### Fixed
 - **Full-page screenshot no longer duplicates a band on pages that scroll smoothly.** The stitch
