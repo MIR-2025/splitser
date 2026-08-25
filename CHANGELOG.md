@@ -6,6 +6,12 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.34 — 2026-08-25
+### Changed
+- **Ctrl+Shift+T now reopens a whole closed workspace**, not just individual tabs. Close a workspace
+  and Ctrl+Shift+T brings the entire thing back -- its layout, panes, and tabs -- as a new workspace
+  (like reopening a closed window). Closing a single tab still reopens just that tab.
+
 ## 0.1.33 — 2026-08-25
 ### Added
 - **Ctrl+Shift+T reopens the last closed tab** (up to 25 back). It brings the tab back into the

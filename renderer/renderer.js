@@ -612,24 +612,29 @@ function teardownTab(tab) {
   if (id != null && api.destroyWc) api.destroyWc(id);
 }
 
-// Recently-closed tabs, newest last. teardownTab is the one hook every close path runs through
-// (closeTab / closePane / setPaneCount / closeSet), so recording here covers them all. Ctrl+Shift+T
-// pops the newest back into the active pane. Only real pages -- skip about:blank / devtools tabs.
-const closedTabs = [];
+// Recently-closed items, newest last: single tabs {type:'tab',url} and whole workspaces
+// {type:'ws',spec}. Ctrl+Shift+T pops the newest -- a tab reopens into the active pane, a workspace
+// reopens as a whole set (layout + panes + tabs), like a browser reopening a closed window.
+const closedItems = [];
+let suppressTabRecord = false;   // set while closing a whole set -- we record the SET, not each tab
+function pushClosed(item) { closedItems.push(item); if (closedItems.length > 25) closedItems.shift(); }
+// teardownTab runs on every tab close (closeTab / closePane / setPaneCount / closeSet), so recording
+// here covers single-tab and pane closes. During a set close we suppress it (the set is recorded whole).
 function rememberClosed(tab) {
+  if (suppressTabRecord) return;
   try {
     const u = (tab.view && tab.view.getURL && tab.view.getURL()) || tab.url || '';
     if (!/^(https?|file):/.test(u)) return;
-    closedTabs.push({ url: u, title: tab.title || u });
-    if (closedTabs.length > 25) closedTabs.shift();
+    pushClosed({ type: 'tab', url: u, title: tab.title || u });
   } catch (e) { /* never block a close */ }
 }
-function reopenClosedTab() {
-  const last = closedTabs.pop();
-  if (!last) return;
+function reopenClosed() {
+  const item = closedItems.pop();
+  if (!item) return;
+  if (item.type === 'ws') { openWorkspaceBookmark(item.spec); return; }   // restore the whole workspace as a new set
   const pane = active() || panes[0];
   if (!pane) return;
-  activePane = pane; addTab(pane, last.url); markActive();
+  activePane = pane; addTab(pane, item.url); markActive();
 }
 
 function closeTab(pane, tab) {
@@ -1061,7 +1066,12 @@ function newIncognitoSet() {   // a private workspace: ephemeral 'split-incognit
 function closeSet(s) {
   if (sets.length <= 1) return;
   const wasIncognito = s.incognito;
+  // Record the whole workspace for Ctrl+Shift+T (unless private -- those are ephemeral). Built before
+  // teardown so the tab URLs are still readable; suppress per-tab recording so we don't double-log.
+  if (!wasIncognito) { const spec = setSpec(s); if (spec.panes.length) pushClosed({ type: 'ws', spec }); }
+  suppressTabRecord = true;
   const i = sets.indexOf(s); s.panes.forEach((p) => p.tabs.forEach(teardownTab)); s.el.remove(); sets.splice(i, 1);
+  suppressTabRecord = false;
   if (cur === s) { cur = null; switchSet(sets[Math.min(i, sets.length - 1)]); }
   else renderSetbar();
   if (wasIncognito && !sets.some((x) => x.incognito)) api.clearIncognito();   // last private workspace closed -> wipe
@@ -1076,7 +1086,7 @@ function requestCloseSet(s) {
     : tabs + ' tabs';
   confirmDialog({
     title: 'Close "' + setName(s, sets.indexOf(s)) + '"?',
-    body: 'This workspace has ' + detail + '. Closing it discards them all -- this cannot be undone.',
+    body: 'This workspace has ' + detail + '. Closing it discards them all (Ctrl+Shift+T reopens it).',
     okLabel: 'Close workspace'
   }, () => closeSet(s));
 }
@@ -1234,7 +1244,7 @@ function handleShortcut(k) {
   const p = active();
   if (k === 'l') p?.addr.focus();
   else if (k === 't') newSet();                                                         // new SET (fresh grid); tabs open via the strip +
-  else if (k === 'shift+t') reopenClosedTab();                                           // reopen the last closed tab
+  else if (k === 'shift+t') reopenClosed();                                              // reopen the last closed tab / workspace
   else if (k === 'shift+n') newIncognitoSet();                                          // new PRIVATE workspace
   else if (k === 'w') { if (p && p.activeTab) closeTab(p, p.activeTab); }               // close TAB (last tab -> pane; last pane -> set)
   else if (k === 'r') p?.view.reload();
@@ -1375,14 +1385,17 @@ infoEl.addEventListener('click', openAbout);
 document.getElementById('open-dl-folder').addEventListener('click', () => api.openDownloads());
 
 // the current workspace as a saveable spec (same shape as a saved-session set)
+function setSpec(s) {   // a set's reopenable spec: name + layout + theme + each pane's real-page URLs
+  return {
+    name: s.name || setName(s, sets.indexOf(s)),
+    layout: s.layout,
+    theme: s.theme || null,
+    panes: s.panes.map((p) => p.tabs.map((t) => { try { return t.view.getURL(); } catch (e) { return t.url || ''; } }).filter((u) => /^(https?|file):/.test(u))).filter((a) => a.length)
+  };
+}
 function currentWorkspaceSpec() {
   if (cur) cur.activePane = activePane;
-  return {
-    name: cur.name || setName(cur, sets.indexOf(cur)),
-    layout: cur.layout,
-    theme: cur.theme || null,
-    panes: cur.panes.map((p) => p.tabs.map((t) => t.view.getURL()).filter((u) => /^(https?|file):/.test(u))).filter((a) => a.length)
-  };
+  return setSpec(cur);
 }
 async function bookmarkCurrentWorkspace() {
   if (cur && cur.incognito) return;   // private workspaces are ephemeral -- don't write them to disk
