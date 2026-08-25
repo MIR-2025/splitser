@@ -17,6 +17,13 @@ contextBridge.exposeInMainWorld('splitAPI', {
   devtoolsAttach: (d) => ipcRenderer.send('devtools:attach', d),        // wire target's DevTools into the host tab's WebContents
   devtoolsClose: (targetWcId) => ipcRenderer.send('devtools:close', targetWcId),   // DevTools host tab closed -> detach from target
 
+  // full-page screenshot: main captures via CDP; the host renderer previews + exports (PNG/PDF/clipboard)
+  onCaptureFull: (cb) => ipcRenderer.on('capture-full', (_e, d) => cb(d)),   // "Capture full page" chosen in the context menu
+  captureFull: (wcId) => ipcRenderer.invoke('capture:full', wcId),          // -> { ok, dataUrl, width, height, scaled }
+  captureSavePng: (d) => ipcRenderer.invoke('capture:savePng', d),
+  captureSavePdf: (d) => ipcRenderer.invoke('capture:savePdf', d),
+  captureCopy: (d) => ipcRenderer.invoke('capture:copy', d),
+
   // shields (ad/tracker blocking)
   shieldsGet: (wcId) => ipcRenderer.invoke('shields:get', wcId),
   navHistory: (wcId) => ipcRenderer.invoke('nav:history', wcId),

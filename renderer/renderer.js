@@ -1202,6 +1202,41 @@ api.onCertError((d) => { for (const s of sets) for (const p of s.panes) for (con
 api.onOpenTabIn((d) => { for (const s of sets) for (const p of s.panes) { if (p.activeTab && p.activeTab.wcId === d.wcId) { activePane = p; addTab(p, d.url); return; } } });
 api.onOpenDevtoolsTab((d) => { for (const s of sets) for (const p of s.panes) { if (p.activeTab && p.activeTab.wcId === d.targetWcId) { activePane = p; openDevtoolsTab(p, d.targetWcId, d.x, d.y); return; } } });
 
+// ---- Full-page screenshot: main captures via CDP, we preview it in a host panel + export it.
+// Host-level (not a webview tab) so it can reach the export IPC without weakening the webview sandbox. ----
+const panelCap = document.getElementById('panel-capture');
+const capImg = document.getElementById('cap-img');
+const capStatus = document.getElementById('cap-status');
+const capDim = document.getElementById('cap-dim');
+let capShot = null;   // { dataUrl, width, height, scaled } of the current preview
+function setCapButtons(on) { ['cap-png', 'cap-pdf', 'cap-copy'].forEach((id) => { document.getElementById(id).disabled = !on; }); }
+api.onCaptureFull(async (d) => {
+  // confirm it's a live tab we own, then show the panel in a "capturing" state
+  let known = false;
+  for (const s of sets) for (const p of s.panes) for (const t of p.tabs) if (t.wcId === d.targetWcId) known = true;
+  if (!known) return;
+  capShot = null; capImg.hidden = true; capImg.removeAttribute('src');
+  capDim.textContent = ''; capStatus.hidden = false; capStatus.textContent = 'Capturing…'; setCapButtons(false);
+  togglePanel(panelCap);
+  const r = await api.captureFull(d.targetWcId).catch((e) => ({ ok: false, error: String(e) }));
+  if (panelCap.hidden) return;   // user closed it while we captured
+  if (!r || !r.ok) { capStatus.textContent = (r && r.error) || 'Capture failed.'; return; }
+  capShot = r;
+  capImg.src = r.dataUrl; capImg.hidden = false; capStatus.hidden = true;
+  capDim.textContent = r.width + '×' + r.height + (r.scaled ? ' · scaled to fit' : '');
+  setCapButtons(true);
+});
+async function capExport(fn, okMsg) {
+  if (!capShot) return;
+  setCapButtons(false);
+  const r = await fn({ dataUrl: capShot.dataUrl, width: capShot.width, height: capShot.height }).catch(() => null);
+  setCapButtons(true);
+  if (r && r.ok) capDim.textContent = okMsg + (r.path ? ' → ' + r.path.split('/').pop() : '');
+}
+document.getElementById('cap-png').addEventListener('click', () => capExport(api.captureSavePng, 'Saved PNG'));
+document.getElementById('cap-pdf').addEventListener('click', () => capExport(api.captureSavePdf, 'Saved PDF'));
+document.getElementById('cap-copy').addEventListener('click', () => capExport(api.captureCopy, 'Copied to clipboard'));
+
 // HTTP Basic/Digest auth: a site (or dev server) asked for credentials
 api.onHttpAuth((d) => showAuthDialog(d));
 function showAuthDialog(d) {

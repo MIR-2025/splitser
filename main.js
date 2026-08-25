@@ -1,7 +1,7 @@
 // Splitser (splitser.org) — main process. Hosts the renderer UI with <webview> enabled
 // (real Chromium views, no header-strip), owns the data layer (history/bookmarks/session/
 // settings via store.js), and handles downloads + permission prompts on the shared session.
-import { app, BrowserWindow, ipcMain, session as electronSession, dialog, shell, clipboard, webContents, Menu, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, session as electronSession, dialog, shell, clipboard, nativeImage, webContents, Menu, screen } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -104,6 +104,8 @@ function buildContextMenu(contents, p) {
   t.push({ label: 'Inspect element', click: () => { try { contents.openDevTools({ mode: 'bottom' }); } catch (e) {} contents.inspectElement(p.x, p.y); } });
   // In a tab: the renderer opens a fresh tab in this pane to host the DevTools (setDevToolsWebContents).
   t.push({ label: 'Inspect in a new tab', click: () => send('open-devtools-tab', { targetWcId: contents.id, x: p.x, y: p.y }) });
+  t.push({ type: 'separator' });
+  t.push({ label: 'Capture full page', click: () => send('capture-full', { targetWcId: contents.id }) });
   return Menu.buildFromTemplate(t);
 }
 
@@ -220,6 +222,93 @@ ipcMain.on('devtools:attach', (_e, { targetId, hostId, x, y }) => {
 ipcMain.on('devtools:close', (_e, targetId) => {   // the DevTools host tab was closed -> detach DevTools from the target (target keeps running)
   const target = targetId ? webContents.fromId(targetId) : null;
   if (target && !target.isDestroyed()) { try { target.closeDevTools(); } catch (e) {} }
+});
+
+// ---- Full-page screenshot. Native, one-shot: attach the debugger to the tab's guest, ask CDP for
+// the WHOLE scrollable page in a single Page.captureScreenshot (captureBeyondViewport) -- no
+// scroll-and-stitch, no OffscreenCanvas seams. Enormous pages are scaled to stay under engine limits. ----
+const CAP_MAX_EDGE = 16384;              // max px on any one edge most engines allow
+const CAP_MAX_AREA = 256 * 1024 * 1024;  // conservative max canvas area (px)
+async function captureFullPage(wcId) {
+  const wc = wcId ? webContents.fromId(wcId) : null;
+  if (!wc || wc.isDestroyed()) return { ok: false, error: 'That tab is gone.' };
+  const dbg = wc.debugger;
+  let attached = false;
+  try {
+    try { dbg.attach('1.3'); attached = true; }
+    catch (e) { return { ok: false, error: 'Close this tab’s DevTools first, then try again.' }; }   // one debugger client at a time
+    const metrics = await dbg.sendCommand('Page.getLayoutMetrics');
+    const cs = metrics.cssContentSize || metrics.contentSize || {};
+    let width = Math.ceil(cs.width || 0), height = Math.ceil(cs.height || 0);
+    if (!width || !height) return { ok: false, error: 'Could not measure the page.' };
+    // Scale down if the full page would exceed engine canvas limits (edge or area), so the capture
+    // never fails silently on a very tall page -- we shrink instead, and report that we did.
+    let scale = Math.min(1, CAP_MAX_EDGE / width, CAP_MAX_EDGE / height, Math.sqrt(CAP_MAX_AREA / (width * height)));
+    const scaled = scale < 1;
+    const shot = await dbg.sendCommand('Page.captureScreenshot', {
+      format: 'png', captureBeyondViewport: true, fromSurface: true,
+      clip: { x: 0, y: 0, width, height, scale }
+    });
+    return { ok: true, dataUrl: 'data:image/png;base64,' + shot.data, width: Math.round(width * scale), height: Math.round(height * scale), scaled };
+  } catch (e) {
+    return { ok: false, error: (e && e.message) || 'Capture failed.' };
+  } finally {
+    if (attached) { try { dbg.detach(); } catch (e) {} }
+  }
+}
+ipcMain.handle('capture:full', (_e, wcId) => captureFullPage(wcId));
+
+function dataUrlToBuffer(dataUrl) { return Buffer.from(String(dataUrl).replace(/^data:image\/png;base64,/, ''), 'base64'); }
+function stampName(ext) { const d = new Date(); const p = (n) => String(n).padStart(2, '0');
+  return `capture-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}.${ext}`; }
+
+ipcMain.handle('capture:savePng', async (_e, { dataUrl } = {}) => {   // user picks the path -> no path-injection risk
+  if (!dataUrl) return { ok: false };
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    title: 'Save full-page screenshot', defaultPath: path.join(app.getPath('downloads'), stampName('png')),
+    filters: [{ name: 'PNG image', extensions: ['png'] }]
+  });
+  if (canceled || !filePath) return { ok: false };
+  try { await fs.promises.writeFile(filePath, dataUrlToBuffer(dataUrl)); return { ok: true, path: filePath }; }
+  catch (e) { return { ok: false, error: e.message }; }
+});
+
+ipcMain.handle('capture:savePdf', async (_e, { dataUrl, width, height } = {}) => {   // render the PNG into a one-page PDF sized to the image
+  if (!dataUrl || !width || !height) return { ok: false };
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    title: 'Save full-page screenshot as PDF', defaultPath: path.join(app.getPath('downloads'), stampName('pdf')),
+    filters: [{ name: 'PDF', extensions: ['pdf'] }]
+  });
+  if (canceled || !filePath) return { ok: false };
+  let off;
+  try {
+    off = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true } });   // hidden (not offscreen -- offscreen breaks printToPDF)
+    // Load a blank page, then inject the image and wait for it to decode. We DON'T put the image in
+    // the navigation URL: a big data: image inside a data:/file: URL blows past Chromium's URL-length
+    // limit (ERR_FAILED). executeJavaScript carries the data URL as a string, which has no such cap.
+    await off.loadURL('about:blank');
+    await off.webContents.executeJavaScript(
+      'new Promise(function(res,rej){' +
+      'document.documentElement.style.margin="0";document.body.style.margin="0";' +
+      'var im=new Image();' +
+      'im.onload=function(){im.style.display="block";im.style.width="100%";document.body.appendChild(im);' +
+      '(im.decode?im.decode().then(res,res):res());};' +
+      'im.onerror=function(){rej(new Error("image decode failed"));};' +
+      'im.src=' + JSON.stringify(dataUrl) + ';})'
+    );
+    const microns = (px) => Math.round((px / 96) * 25400);   // CSS px -> microns at 96dpi
+    const pdf = await off.webContents.printToPDF({ printBackground: true, margins: { marginType: 'none' },
+      pageSize: { width: microns(width), height: microns(height) } });
+    await fs.promises.writeFile(filePath, pdf);
+    return { ok: true, path: filePath };
+  } catch (e) { return { ok: false, error: e.message }; }
+  finally { if (off && !off.isDestroyed()) off.destroy(); }
+});
+
+ipcMain.handle('capture:copy', (_e, { dataUrl } = {}) => {   // put the PNG on the clipboard as an image
+  if (!dataUrl) return { ok: false };
+  try { clipboard.writeImage(nativeImage.createFromDataURL(dataUrl)); return { ok: true }; }
+  catch (e) { return { ok: false, error: e.message }; }
 });
 ipcMain.on('open-downloads', () => shell.openPath(app.getPath('downloads')));
 ipcMain.on('download:open', (_e, p) => { if (dlPaths.has(p)) shell.openPath(p); });

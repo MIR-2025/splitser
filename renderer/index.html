@@ -84,6 +84,20 @@
     </div>
   </div>
 
+  <div class="panel panel-capture" id="panel-capture" hidden>
+    <div class="panel-h">Full-page capture <span class="cap-dim" id="cap-dim"></span>
+      <span class="cap-actions">
+        <button class="panel-link" id="cap-png" title="Save as PNG">&#128190; PNG</button>
+        <button class="panel-link" id="cap-pdf" title="Save as PDF">&#128196; PDF</button>
+        <button class="panel-link" id="cap-copy" title="Copy image to clipboard">&#128203; Copy</button>
+      </span>
+    </div>
+    <div class="panel-body cap-body" id="cap-body">
+      <div class="cap-status" id="cap-status">Capturing…</div>
+      <img class="cap-img" id="cap-img" alt="" hidden />
+    </div>
+  </div>
+
   <script type="module" src="renderer.js"></script>
 </body>
 </html>
