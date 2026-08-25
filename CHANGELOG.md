@@ -6,6 +6,18 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.29 — 2026-08-25
+### Fixed
+- **Full-page screenshot now captures the whole page, not the visible part repeated.** On 0.1.28 the
+  capture tiled the visible viewport down the image instead of scrolling through the real content --
+  because a `<webview>`'s off-screen area isn't rendered until it's scrolled into view. It now
+  scroll-and-stitches the page a viewport at a time onto one image, so what you save is the actual
+  full page. Very tall pages are still scaled to stay within image limits.
+
+### Added
+- **A close (×) button on the capture preview** (and **Esc** closes it too) -- previously the only way
+  out was clicking a workspace pill.
+
 ## 0.1.28 — 2026-08-25
 ### Added
 - **Full-page screenshots.** Right-click a page → **Capture full page**. It grabs the whole

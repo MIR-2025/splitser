@@ -1279,6 +1279,8 @@ async function capExport(fn, okMsg) {
 document.getElementById('cap-png').addEventListener('click', () => capExport(api.captureSavePng, 'Saved PNG'));
 document.getElementById('cap-pdf').addEventListener('click', () => capExport(api.captureSavePdf, 'Saved PDF'));
 document.getElementById('cap-copy').addEventListener('click', () => capExport(api.captureCopy, 'Copied to clipboard'));
+document.getElementById('cap-close').addEventListener('click', () => { panelCap.hidden = true; capShot = null; });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panelCap.hidden) { panelCap.hidden = true; capShot = null; } });
 
 // HTTP Basic/Digest auth: a site (or dev server) asked for credentials
 api.onHttpAuth((d) => showAuthDialog(d));

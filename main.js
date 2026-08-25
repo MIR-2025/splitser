@@ -233,28 +233,67 @@ async function captureFullPage(wcId) {
   const wc = wcId ? webContents.fromId(wcId) : null;
   if (!wc || wc.isDestroyed()) return { ok: false, error: 'That tab is gone.' };
   const dbg = wc.debugger;
-  let attached = false;
+  let attached = false, origY = 0, scrolled = false;
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   try {
     try { dbg.attach('1.3'); attached = true; }
     catch (e) { return { ok: false, error: 'Close this tab’s DevTools first, then try again.' }; }   // one debugger client at a time
-    const metrics = await dbg.sendCommand('Page.getLayoutMetrics');
-    const cs = metrics.cssContentSize || metrics.contentSize || {};
-    let width = Math.ceil(cs.width || 0), height = Math.ceil(cs.height || 0);
-    if (!width || !height) return { ok: false, error: 'Could not measure the page.' };
-    // Scale down if the full page would exceed engine canvas limits (edge or area), so the capture
-    // never fails silently on a very tall page -- we shrink instead, and report that we did.
-    let scale = Math.min(1, CAP_MAX_EDGE / width, CAP_MAX_EDGE / height, Math.sqrt(CAP_MAX_AREA / (width * height)));
+    // Measure from the page itself. captureBeyondViewport / device-metrics overrides DON'T re-raster a
+    // <webview> guest's off-screen content (its surface is tied to the visible element) -- they just tile
+    // the visible viewport (the "repeated viewport" bug). So we scroll-and-stitch, like a real full-page
+    // capture tool: scroll a viewport at a time, grab each visible tile, and stitch them on a canvas.
+    const evalJson = async (expr) => (await dbg.sendCommand('Runtime.evaluate', { expression: expr, returnByValue: true })).result.value;
+    const g = await evalJson('JSON.stringify({sw:Math.max(document.documentElement.scrollWidth,document.body?document.body.scrollWidth:0),sh:Math.max(document.documentElement.scrollHeight,document.body?document.body.scrollHeight:0),vw:innerWidth,vh:innerHeight,dpr:devicePixelRatio||1,y:window.scrollY})');
+    const { sw, sh, vw, vh, dpr } = JSON.parse(g);
+    origY = JSON.parse(g).y;
+    if (!sw || !sh) return { ok: false, error: 'Could not measure the page.' };
+    // Output scale: clamp so the stitched canvas (in device px) stays under engine limits.
+    const pxW = sw * dpr, pxH = sh * dpr;
+    const scale = Math.min(1, CAP_MAX_EDGE / pxW, CAP_MAX_EDGE / pxH, Math.sqrt(CAP_MAX_AREA / (pxW * pxH)));
     const scaled = scale < 1;
-    const shot = await dbg.sendCommand('Page.captureScreenshot', {
-      format: 'png', captureBeyondViewport: true, fromSurface: true,
-      clip: { x: 0, y: 0, width, height, scale }
-    });
-    return { ok: true, dataUrl: 'data:image/png;base64,' + shot.data, width: Math.round(width * scale), height: Math.round(height * scale), scaled };
+    // Capture tiles top-to-bottom. The last tile clamps at the bottom and overlaps the previous one
+    // (overlap overwrites with identical content -- no gap), so remainders are handled correctly.
+    const tiles = [];
+    for (let y = 0; y < sh; y += vh) {
+      await dbg.sendCommand('Runtime.evaluate', { expression: 'window.scrollTo(0,' + y + ')' });
+      scrolled = true;
+      await wait(140);   // let sticky/lazy content settle for this tile
+      const actualY = await evalJson('Math.round(window.scrollY)');
+      const shot = await dbg.sendCommand('Page.captureScreenshot', { format: 'png', fromSurface: true });
+      tiles.push({ y: actualY, data: shot.data });
+      if (actualY + vh >= sh) break;   // reached the bottom
+      if (tiles.length > 200) break;    // sanity cap on absurdly long pages
+    }
+    const dataUrl = await stitchTiles(tiles, { vw, vh, dpr, sh, scale });
+    return { ok: true, dataUrl, width: Math.round(sw * dpr * scale), height: Math.round(sh * dpr * scale), scaled };
   } catch (e) {
     return { ok: false, error: (e && e.message) || 'Capture failed.' };
   } finally {
+    if (scrolled) { try { await dbg.sendCommand('Runtime.evaluate', { expression: 'window.scrollTo(0,' + origY + ')' }); } catch (e) {} }
     if (attached) { try { dbg.detach(); } catch (e) {} }
   }
+}
+// Stitch viewport tiles onto one canvas in a hidden window (no image lib needed). Each tile is a full
+// visible-viewport PNG; we draw it at its scroll offset. Returns a PNG data URL of the whole page.
+async function stitchTiles(tiles, geo) {
+  let off;
+  try {
+    off = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, offscreen: false } });
+    await off.loadURL('about:blank');
+    const dataUrl = await off.webContents.executeJavaScript(
+      '(async function(){' +
+      'var T=' + JSON.stringify(tiles) + ',G=' + JSON.stringify(geo) + ';' +
+      'var W=Math.round(G.vw*G.dpr*G.scale),H=Math.round(G.sh*G.dpr*G.scale);' +
+      'var c=document.createElement("canvas");c.width=W;c.height=H;var x=c.getContext("2d");' +
+      'for(var i=0;i<T.length;i++){var t=T[i];' +
+      'var im=new Image();await new Promise(function(res,rej){im.onload=res;im.onerror=res;im.src="data:image/png;base64,"+t.data;});' +
+      'var dy=Math.round(t.y*G.dpr*G.scale);' +
+      'x.drawImage(im,0,0,im.naturalWidth,im.naturalHeight,0,dy,Math.round(im.naturalWidth*G.scale),Math.round(im.naturalHeight*G.scale));' +
+      '}' +
+      'return c.toDataURL("image/png");})()'
+    );
+    return dataUrl;
+  } finally { if (off && !off.isDestroyed()) off.destroy(); }
 }
 ipcMain.handle('capture:full', (_e, wcId) => captureFullPage(wcId));
 
