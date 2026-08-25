@@ -6,6 +6,28 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.28 — 2026-08-25
+### Added
+- **Full-page screenshots.** Right-click a page → **Capture full page**. It grabs the whole
+  scrollable page in one shot (not just the visible part), shows a preview, and lets you **save
+  as PNG**, **save as PDF**, or **copy to the clipboard**. Very tall pages are scaled down to stay
+  within image limits, and the preview tells you when that happened.
+- **Inspect inside the pane.** The right-click menu now offers *Inspect element* (DevTools docked
+  in the pane) and *Inspect in a new tab* (DevTools rendered into a fresh tab in the same pane),
+  instead of only a separate floating window.
+- **Switch workspaces from the keyboard.** **Ctrl+Tab** goes to the next workspace (wrapping past
+  the last to the first); **Ctrl+Shift+Tab** goes to the previous (wrapping to the last).
+- **Reorder workspaces by dragging.** Drag a pill in the Workspaces bar to a new position; the new
+  order is remembered across restarts. A plain click still switches workspaces.
+
+### Fixed
+- **Closing a pane no longer leaks its page.** A pane/tab's page (and any DevTools open on it) is now
+  fully destroyed on close. Previously an open DevTools kept the page — and its window — alive in the
+  background after the pane was gone.
+
+> Note: 0.1.27 was pulled before general use (a geolocation feature that didn't pan out); 0.1.28 is
+> the next shipping release and does not include it.
+
 ## 0.1.26 — 2026-08-19
 ### Added
 - **Workspace activity badges.** When pages change -- new titles or navigations -- in a workspace that
