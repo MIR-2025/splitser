@@ -6,6 +6,15 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.30 — 2026-08-25
+### Fixed
+- **Full-page screenshot no longer duplicates a band on pages that scroll smoothly.** The stitch
+  recorded each tile's scroll position separately from taking its picture, so on a page with
+  smooth scrolling (or slow-to-settle content) the position didn't match the pixels and a strip
+  repeated. It now scrolls with smooth-scrolling forced off, waits for the scroll to actually
+  settle, and reads the position in the same step it captures -- and re-measures the page height
+  as it goes, so lazily-loaded content is included.
+
 ## 0.1.29 — 2026-08-25
 ### Fixed
 - **Full-page screenshot now captures the whole page, not the visible part repeated.** On 0.1.28 the

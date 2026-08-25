@@ -233,8 +233,7 @@ async function captureFullPage(wcId) {
   const wc = wcId ? webContents.fromId(wcId) : null;
   if (!wc || wc.isDestroyed()) return { ok: false, error: 'That tab is gone.' };
   const dbg = wc.debugger;
-  let attached = false, origY = 0, scrolled = false;
-  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  let attached = false, scrolled = false;
   try {
     try { dbg.attach('1.3'); attached = true; }
     catch (e) { return { ok: false, error: 'Close this tab’s DevTools first, then try again.' }; }   // one debugger client at a time
@@ -242,34 +241,46 @@ async function captureFullPage(wcId) {
     // <webview> guest's off-screen content (its surface is tied to the visible element) -- they just tile
     // the visible viewport (the "repeated viewport" bug). So we scroll-and-stitch, like a real full-page
     // capture tool: scroll a viewport at a time, grab each visible tile, and stitch them on a canvas.
+    // returnByValue eval; evalAsync awaits an in-page Promise (for the scroll-settle step).
     const evalJson = async (expr) => (await dbg.sendCommand('Runtime.evaluate', { expression: expr, returnByValue: true })).result.value;
+    const evalAsync = async (expr) => (await dbg.sendCommand('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true })).result.value;
+    // Kill smooth scrolling first. With scroll-behavior:smooth, scrollTo animates -- so the scrollY we
+    // record for a tile doesn't match where the shot was actually taken, and tiles land at the wrong
+    // offset and duplicate content. Force 'auto' for the capture; we restore it afterward.
+    await evalJson("(function(){var d=document.documentElement;window.__pcap={sb:d.style.scrollBehavior,bsb:document.body?document.body.style.scrollBehavior:'',y:window.scrollY};d.style.scrollBehavior='auto';if(document.body)document.body.style.scrollBehavior='auto';return 1;})()");
+    scrolled = true;
     const g = await evalJson('JSON.stringify({sw:Math.max(document.documentElement.scrollWidth,document.body?document.body.scrollWidth:0),sh:Math.max(document.documentElement.scrollHeight,document.body?document.body.scrollHeight:0),vw:innerWidth,vh:innerHeight,dpr:devicePixelRatio||1,y:window.scrollY})');
-    const { sw, sh, vw, vh, dpr } = JSON.parse(g);
-    origY = JSON.parse(g).y;
+    const g0 = JSON.parse(g);
+    const { vw, vh, dpr } = g0; let { sw, sh } = g0;
     if (!sw || !sh) return { ok: false, error: 'Could not measure the page.' };
     // Output scale: clamp so the stitched canvas (in device px) stays under engine limits.
     const pxW = sw * dpr, pxH = sh * dpr;
     const scale = Math.min(1, CAP_MAX_EDGE / pxW, CAP_MAX_EDGE / pxH, Math.sqrt(CAP_MAX_AREA / (pxW * pxH)));
     const scaled = scale < 1;
-    // Capture tiles top-to-bottom. The last tile clamps at the bottom and overlaps the previous one
-    // (overlap overwrites with identical content -- no gap), so remainders are handled correctly.
+    // Capture tiles top-to-bottom. Each step scrolls, waits two animation frames + a beat for it to
+    // actually paint, then reads the SETTLED scrollY -- in one awaited call -- so the tile's recorded
+    // offset matches the pixels we capture right after. Re-measures height each step (lazy content).
     const tiles = [];
     for (let y = 0; y < sh; y += vh) {
-      await dbg.sendCommand('Runtime.evaluate', { expression: 'window.scrollTo(0,' + y + ')' });
-      scrolled = true;
-      await wait(140);   // let sticky/lazy content settle for this tile
-      const actualY = await evalJson('Math.round(window.scrollY)');
+      const info = JSON.parse(await evalAsync(
+        '(async function(){window.scrollTo(0,' + y + ');' +
+        'await new Promise(function(r){requestAnimationFrame(function(){requestAnimationFrame(r);});});' +
+        'await new Promise(function(r){setTimeout(r,90);});' +
+        'return JSON.stringify({y:Math.round(window.scrollY),sh:Math.max(document.documentElement.scrollHeight,document.body?document.body.scrollHeight:0)});})()'
+      ));
       const shot = await dbg.sendCommand('Page.captureScreenshot', { format: 'png', fromSurface: true });
-      tiles.push({ y: actualY, data: shot.data });
-      if (actualY + vh >= sh) break;   // reached the bottom
-      if (tiles.length > 200) break;    // sanity cap on absurdly long pages
+      tiles.push({ y: info.y, data: shot.data });
+      if (info.sh > sh) sh = info.sh;              // page grew (lazy content) -> keep going
+      if (info.y + vh >= sh) break;                // reached the bottom
+      if (tiles.length > 200) break;               // sanity cap on absurdly long pages
     }
     const dataUrl = await stitchTiles(tiles, { vw, vh, dpr, sh, scale });
     return { ok: true, dataUrl, width: Math.round(sw * dpr * scale), height: Math.round(sh * dpr * scale), scaled };
   } catch (e) {
     return { ok: false, error: (e && e.message) || 'Capture failed.' };
   } finally {
-    if (scrolled) { try { await dbg.sendCommand('Runtime.evaluate', { expression: 'window.scrollTo(0,' + origY + ')' }); } catch (e) {} }
+    // restore the page's scroll-behavior + original scroll position
+    if (scrolled) { try { await dbg.sendCommand('Runtime.evaluate', { expression: "(function(){var d=document.documentElement,c=window.__pcap||{};d.style.scrollBehavior=c.sb||'';if(document.body)document.body.style.scrollBehavior=c.bsb||'';window.scrollTo(0,c.y||0);try{delete window.__pcap;}catch(e){}})()" }); } catch (e) {} }
     if (attached) { try { dbg.detach(); } catch (e) {} }
   }
 }
