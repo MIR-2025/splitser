@@ -605,10 +605,31 @@ function switchTab(pane, tab) {
 // did-start-loading); tell main to destroy it outright. Call this before removing the element.
 function teardownTab(tab) {
   if (!tab) return;
+  rememberClosed(tab);   // record its URL for Ctrl+Shift+T before we destroy it
   if (tab.isDevtools && tab.devtoolsTarget != null && api.devtoolsClose) api.devtoolsClose(tab.devtoolsTarget);   // detach DevTools from the still-live target
   let id = tab.wcId;
   if (id == null) { try { id = tab.view.getWebContentsId(); } catch (e) { id = null; } }
   if (id != null && api.destroyWc) api.destroyWc(id);
+}
+
+// Recently-closed tabs, newest last. teardownTab is the one hook every close path runs through
+// (closeTab / closePane / setPaneCount / closeSet), so recording here covers them all. Ctrl+Shift+T
+// pops the newest back into the active pane. Only real pages -- skip about:blank / devtools tabs.
+const closedTabs = [];
+function rememberClosed(tab) {
+  try {
+    const u = (tab.view && tab.view.getURL && tab.view.getURL()) || tab.url || '';
+    if (!/^(https?|file):/.test(u)) return;
+    closedTabs.push({ url: u, title: tab.title || u });
+    if (closedTabs.length > 25) closedTabs.shift();
+  } catch (e) { /* never block a close */ }
+}
+function reopenClosedTab() {
+  const last = closedTabs.pop();
+  if (!last) return;
+  const pane = active() || panes[0];
+  if (!pane) return;
+  activePane = pane; addTab(pane, last.url); markActive();
 }
 
 function closeTab(pane, tab) {
@@ -1213,6 +1234,7 @@ function handleShortcut(k) {
   const p = active();
   if (k === 'l') p?.addr.focus();
   else if (k === 't') newSet();                                                         // new SET (fresh grid); tabs open via the strip +
+  else if (k === 'shift+t') reopenClosedTab();                                           // reopen the last closed tab
   else if (k === 'shift+n') newIncognitoSet();                                          // new PRIVATE workspace
   else if (k === 'w') { if (p && p.activeTab) closeTab(p, p.activeTab); }               // close TAB (last tab -> pane; last pane -> set)
   else if (k === 'r') p?.view.reload();
