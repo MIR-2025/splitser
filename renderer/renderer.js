@@ -142,6 +142,13 @@ function openTabColorPicker(pane, tab, tabEl) {   // right-click a tab -> overri
   setTimeout(() => document.addEventListener('mousedown', function h(e) { if (!pop.contains(e.target)) { closeTabColorPicker(); document.removeEventListener('mousedown', h); } }), 0);
 }
 
+// Security glyphs as inline SVG that inherit `currentColor`, so the .secure (green) / .insecure
+// (amber) CSS actually applies. The old &#128274; / &#9888; are COLOUR emoji (Noto Color Emoji on
+// Linux) which paint their own palette and ignore `color:` -- so a secure site showed a gold lock,
+// indistinguishable from the amber "not secure" warning. Shape + colour now both distinguish them.
+const LOCK_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path d="M12 1a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2h-1V6a5 5 0 0 0-5-5zm3 8H9V6a3 3 0 0 1 6 0v3z"/></svg>';
+const WARN_SVG = '<svg viewBox="0 0 24 24" width="13" height="13" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M12 2 1 21h22L12 2zm-1 6h2v6h-2V8zm0 8h2v2h-2v-2z"/></svg>';
+
 // ---- address-bar security badge: "secure" (https) / "not secure" (http) for real remote sites; nothing
 // for file://, about:, or localhost (fine over http). Clicking it shows the site's TLS certificate. ----
 function siteSecurity(url) {
@@ -173,7 +180,7 @@ async function openCertPopover(pane) {
         '</div>'
       : '<div class="cert-warn">Encrypted (HTTPS). Certificate details aren\'t cached yet -- reload the page to fetch them.</div>';
   const pop = document.createElement('div'); pop.className = 'cert-pop ' + st;
-  pop.innerHTML = '<div class="cert-h">' + (st === 'secure' ? '&#128274; Secure connection' : '&#9888;&#65039; Not secure') + '</div>' +
+  pop.innerHTML = '<div class="cert-h">' + (st === 'secure' ? LOCK_SVG + ' Secure connection' : WARN_SVG + ' Not secure') + '</div>' +
     '<div class="cert-host">' + esc(host) + '</div>' + body;
   pane.el.appendChild(pop);
   const br = pane.lockBtn.getBoundingClientRect(), pr = pane.el.getBoundingClientRect();
@@ -377,7 +384,7 @@ function makePane(url, beforeEl = null, tabUrls = null) {
     if (!st) { b.hidden = true; b.classList.remove('secure', 'insecure'); return; }
     b.hidden = false;
     b.classList.toggle('secure', st === 'secure'); b.classList.toggle('insecure', st === 'insecure');
-    b.innerHTML = st === 'secure' ? '&#128274;' : '&#9888;';
+    b.innerHTML = st === 'secure' ? LOCK_SVG : WARN_SVG;   // SVG (currentColor) so .secure/.insecure colour it
     b.title = st === 'secure' ? 'Secure (HTTPS) -- click for the certificate' : 'Not secure -- no HTTPS. Click for details';
   };
 

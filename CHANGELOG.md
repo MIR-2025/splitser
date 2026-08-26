@@ -6,6 +6,14 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.36 — 2026-08-25
+### Fixed
+- **The address-bar security indicator now shows green for HTTPS and amber for HTTP** -- before, secure
+  sites showed a gold padlock indistinguishable from the amber "not secure" warning, so you couldn't
+  tell a secure site from an insecure one at a glance. The lock/warning glyphs were colour emoji, which
+  paint their own palette and ignore the CSS colour; they're now inline SVGs that take the intended
+  colour (and a distinct shape per state).
+
 ## 0.1.35 — 2026-08-25
 ### Changed
 - **Ctrl+T opens a new tab in the current pane again** (standard browser behavior). It had been

@@ -314,6 +314,8 @@ webview{ display:flex }
 .nav.lock{ font-size:12px; padding:0 3px; cursor:pointer }
 .nav.lock.secure{ color:#5fe08a }
 .nav.lock.insecure{ color:#f7b955 }
+.nav.lock svg{ display:inline-block; vertical-align:middle; }   /* inherits currentColor from the .secure/.insecure rules */
+.cert-h svg{ vertical-align:-2px; margin-right:3px; }
 .cert-pop{ position:absolute; z-index:50; min-width:240px; max-width:340px; background:var(--chrome); border:1px solid var(--line-2);
   border-radius:10px; box-shadow:0 12px 30px rgba(0,0,0,.5); padding:12px 14px; font-size:12px; color:var(--text) }
 .cert-h{ font-weight:600; font-size:13px }
