@@ -6,6 +6,31 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.37 — 2026-09-15
+### Added
+- **Task manager** (📊 in the footer) -- every tab in every workspace, sorted by resident memory, with
+  the workspace and pane it lives in, **cumulative CPU** (seconds since that process started), live
+  CPU%, and an audible marker. Per row: **Reload**, which hands a tab's memory back without losing the
+  tab, and click-to-jump. It measures; it does not manage -- nothing is discarded or throttled on your
+  behalf. The totals are honest about the fact that tabs and processes aren't 1:1: a renderer process
+  shared by several tabs is counted **once**, and cross-origin iframe processes, which belong to no
+  tab at all, are listed separately as unattributed, so the panel reconciles with `ps` instead of
+  double-counting.
+- **Tab hover cards** -- hovering a tab now shows a styled card with its title, URL, and **memory**,
+  instead of the OS tooltip.
+- **`splitser --new-workspace [url]`** -- opens the URL in a **new single-pane workspace** and switches
+  to it, leaving the workspace you were on untouched. Plain `splitser <url>` still adds a pane to the
+  workspace you're looking at, which is right for "open this link" and wrong for anything scripted.
+  With no URL it lands on the home page with the address bar focused. Works on a cold launch and when
+  handing a URL to an already-running window.
+- **`Ctrl`+middle-click a link opens it as a new tab in the pane you clicked in**, instead of a new
+  pane -- for when you want the link beside the page rather than beside the pane. Plain middle-click
+  is unchanged and still opens a pane. Main-frame only, so a link inside an iframe still opens a pane.
+### Changed
+- **Docs:** `Ctrl+T` is a new **tab** (it was briefly documented as "new pane" / "new workspace" in
+  README and FEATURES, left over from the 0.1.35 shortcut change). New panes are `Ctrl+\`, and new
+  workspaces come from **+ Workspace**.
+
 ## 0.1.36 — 2026-08-25
 ### Fixed
 - **The address-bar security indicator now shows green for HTTPS and amber for HTTP** -- before, secure

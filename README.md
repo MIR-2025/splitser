@@ -29,7 +29,9 @@ controlling tty, reparented to init):
 
 - **Address bar** — type a URL or a search, Enter to go. Reload / back / forward are real
   per-view navigation; each pane keeps its own history.
-- **Split** — the `+` on a pane's toolbar (or `Ctrl+T`) opens a new pane to its right.
+- **Split** — the `+` on a pane's toolbar (or `Ctrl+\`) opens a new pane to its right;
+  `Ctrl+Shift+O` opens one below. `Ctrl+T` is a new **tab** in the current pane, and a new
+  **workspace** comes from **+ Workspace** in the Workspaces bar.
 - **Close** — the `×` (or `Ctrl+W`); the last pane always stays.
 - **Resize** — drag the gutter between two panes.
 - **Find in page** — `Ctrl+F` (native `webview.findInPage` — real highlights + match count).

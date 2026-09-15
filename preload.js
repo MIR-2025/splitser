@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('splitAPI', {
   appReady: () => ipcRenderer.send('app:ready'),   // renderer signals restore is done (so main can open a launch URL)
   // main -> renderer events
   onOpenPane: (cb) => ipcRenderer.on('open-pane', (_e, url) => cb(url)),
+  onOpenWorkspace: (cb) => ipcRenderer.on('open-workspace', (_e, url) => cb(url)),   // --new-workspace: a fresh single-pane set
   onShortcut: (cb) => ipcRenderer.on('shortcut', (_e, key) => cb(key)),
   onDownload: (cb) => ipcRenderer.on('download-update', (_e, d) => cb(d)),
   onShields: (cb) => ipcRenderer.on('shields-update', (_e, d) => cb(d)),
@@ -64,6 +65,7 @@ contextBridge.exposeInMainWorld('splitAPI', {
   revealDownload: (p) => ipcRenderer.send('download:reveal', p),  // show it in the OS file manager
   clearIncognito: () => ipcRenderer.send('incognito:clear'),      // wipe the ephemeral session
   destroyWc: (wcId) => ipcRenderer.send('destroy-wc', wcId),      // force-destroy a closed pane/tab's guest WebContents (+ its DevTools)
+  metricsGet: () => ipcRenderer.invoke('metrics:get'),            // per-tab RSS/CPU for the task manager + tab hover cards
 
   // vault (main stores only the encrypted blob) + clipboard
   vaultGet: () => ipcRenderer.invoke('vault:get'),

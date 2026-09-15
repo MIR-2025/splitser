@@ -16,14 +16,25 @@ let win;
 // argv (opened once the renderer is ready), or -- if we're already running -- the OS starts a second
 // instance whose argv is handed to us via 'second-instance', where we open it in a new pane. ----
 function urlFromArgv(argv) { return (argv || []).find((a) => /^https?:\/\//i.test(a)) || ''; }
+// --new-workspace: land the URL in a NEW single-pane workspace instead of bolting a pane onto
+// whichever workspace happens to be on screen. Without it, handing Splitser a URL rearranges the
+// layout you were looking at -- fine for "open this link", wrong for anything automated or scripted.
+// Works on a cold launch and on a hand-off to an already-running window.
+function workspaceFromArgv(argv) { return (argv || []).some((a) => /^--new-workspace$/i.test(a)); }
 let pendingUrl = urlFromArgv(process.argv);            // a URL from THIS launch, opened after the UI is ready
+let pendingWorkspace = workspaceFromArgv(process.argv);
 const gotSingleLock = app.requestSingleInstanceLock();
 if (!gotSingleLock) { app.quit(); }
 else {
   try { app.setAsDefaultProtocolClient('http'); app.setAsDefaultProtocolClient('https'); } catch (e) { /* best effort */ }
   app.on('second-instance', (_e, argv) => {
     const url = urlFromArgv(argv);
-    if (win && !win.isDestroyed()) { if (win.isMinimized()) win.restore(); win.show(); win.focus(); if (url) win.webContents.send('open-pane', url); }
+    if (!win || win.isDestroyed()) return;
+    if (win.isMinimized()) win.restore();
+    win.show(); win.focus();
+    // --new-workspace is meaningful with no URL too: a fresh single-pane workspace on the home page.
+    if (workspaceFromArgv(argv)) win.webContents.send('open-workspace', url);
+    else if (url) win.webContents.send('open-pane', url);
   });
 }
 
@@ -203,7 +214,11 @@ ipcMain.handle('cert:proceed', (_e, { wcId, host, url }) => {   // user clicked 
 const dlPaths = new Set();   // full paths of files we've saved -- open/reveal is gated to these
 ipcMain.on('app:home', (e) => { e.returnValue = app.getPath('home'); });   // sync home dir for the sandboxed preload
 ipcMain.on('app:version', (e) => { e.returnValue = app.getVersion(); });   // sync app version for the About popover
-ipcMain.on('app:ready', () => { if (pendingUrl && win && !win.isDestroyed()) { win.webContents.send('open-pane', pendingUrl); pendingUrl = ''; } });   // renderer restore done -> open a launch URL
+ipcMain.on('app:ready', () => {   // renderer restore done -> open this launch's URL
+  if (!win || win.isDestroyed()) return;
+  if (pendingWorkspace) { win.webContents.send('open-workspace', pendingUrl); pendingWorkspace = false; pendingUrl = ''; return; }
+  if (pendingUrl) { win.webContents.send('open-pane', pendingUrl); pendingUrl = ''; }
+});
 ipcMain.on('destroy-wc', (_e, id) => {   // a pane/tab was closed -> definitively tear down its guest WebContents (+ any open DevTools)
   const wc = id ? webContents.fromId(id) : null;                 // detaching the <webview> alone leaks the guest when DevTools has it pinned
   if (wc && !wc.isDestroyed()) { try { wc.closeDevTools(); } catch (e) {} try { wc.destroy(); } catch (e) {} }
@@ -222,6 +237,65 @@ ipcMain.on('devtools:attach', (_e, { targetId, hostId, x, y }) => {
 ipcMain.on('devtools:close', (_e, targetId) => {   // the DevTools host tab was closed -> detach DevTools from the target (target keeps running)
   const target = targetId ? webContents.fromId(targetId) : null;
   if (target && !target.isDestroyed()) { try { target.closeDevTools(); } catch (e) {} }
+});
+
+// ---- Per-tab memory + CPU, for the task-manager panel and the tab hover cards.
+// getAppMetrics() is per-PROCESS; the UI wants per-TAB. Join them on getOSProcessId(). Two things
+// make that join lossy, and both are REPORTED rather than papered over, because a memory table that
+// quietly sums to the wrong number is worse than no table:
+//   * several tabs can share one renderer process (same-site tabs land in the same process), so a
+//     pid's memory is real ONCE -- `shared` says how many tabs sit in it, and the panel adds each
+//     pid in once, not once per tab;
+//   * cross-origin iframes are genuine renderer processes owned by NO webContents. They are summed
+//     into `unattributed` instead of disappearing, so the panel's total still reconciles with ps.
+// `cpuPercent` is measured since the LAST call (Electron resets the window each time), so the first
+// read after the panel opens is always 0 -- the panel polls and shows a dash until the second frame.
+// `cpuSeconds` is cumulative since process start and needs no sampling; it is the column that catches
+// a background tab which has been quietly burning a core for days.
+ipcMain.handle('metrics:get', () => {
+  const metrics = app.getAppMetrics();
+  const byPid = new Map(metrics.map((m) => [m.pid, m]));
+  const ownedPids = new Set();     // every pid some webContents accounts for (tabs, host UI, devtools)
+  const tabsByPid = new Map();     // pid -> how many <webview> tabs live in it
+  const tabs = [];
+
+  for (const wc of webContents.getAllWebContents()) {
+    if (wc.isDestroyed()) continue;
+    let pid = 0;
+    try { pid = wc.getOSProcessId(); } catch (e) { continue; }   // not attached yet
+    if (!pid) continue;
+    ownedPids.add(pid);
+    if (wc.getType() !== 'webview') continue;                    // host UI + devtools are not tabs
+    tabsByPid.set(pid, (tabsByPid.get(pid) || 0) + 1);
+    const m = byPid.get(pid);
+    let audible = false;
+    try { audible = wc.isCurrentlyAudible(); } catch (e) { /* gone mid-call */ }
+    tabs.push({
+      wcId: wc.id, pid, audible,
+      url: (() => { try { return wc.getURL(); } catch (e) { return ''; } })(),
+      title: (() => { try { return wc.getTitle(); } catch (e) { return ''; } })(),
+      rssKB: m ? m.memory.workingSetSize : null,                 // workingSetSize is KB on Linux
+      cpuSeconds: (m && m.cpu && typeof m.cpu.cumulativeCPUUsage === 'number') ? m.cpu.cumulativeCPUUsage : null,
+      cpuPercent: (m && m.cpu && typeof m.cpu.percentCPUUsage === 'number') ? m.cpu.percentCPUUsage : null
+    });
+  }
+  tabs.forEach((t) => { t.shared = tabsByPid.get(t.pid) || 1; });
+
+  // renderer processes ('Tab') that no webContents claims -> out-of-process iframes and friends
+  let unattributedKB = 0, unattributedCount = 0;
+  for (const m of metrics) {
+    if (m.type !== 'Tab' || ownedPids.has(m.pid)) continue;
+    unattributedKB += m.memory.workingSetSize; unattributedCount++;
+  }
+  const totalKB = metrics.reduce((n, m) => n + m.memory.workingSetSize, 0);
+  const browser = metrics.find((m) => m.type === 'Browser');
+  const gpu = metrics.find((m) => m.type === 'GPU');
+  return {
+    tabs, unattributedKB, unattributedCount, totalKB,
+    processCount: metrics.length,
+    browserKB: browser ? browser.memory.workingSetSize : 0,
+    gpuKB: gpu ? gpu.memory.workingSetSize : 0
+  };
 });
 
 // ---- Full-page screenshot. Native, one-shot: attach the debugger to the tab's guest, ask CDP for

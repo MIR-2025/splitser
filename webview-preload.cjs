@@ -50,6 +50,29 @@ document.addEventListener('click', (e) => {
 // Enter pressed inside a password field
 document.addEventListener('keydown', (e) => { try { if (e.key === 'Enter' && e.target && e.target.type === 'password') setTimeout(() => report(null), 0); } catch (x) { /* ignore */ } }, true);
 
+// ---- Ctrl+middle-click a link -> open it as a new TAB in this pane (not a new pane).
+// It has to be caught HERE, in the page: plain middle-click and Ctrl+click both reach main as
+// disposition 'background-tab' and setWindowOpenHandler carries no modifier keys, so main cannot
+// tell them apart. We recognise the intent, cancel the default (otherwise Chromium's window-open
+// handler fires and opens a PANE), and hand the URL to the host renderer, which owns this webview
+// and so knows exactly which pane to put the tab in. Plain middle-click is untouched -> still a pane.
+// Main frame only (nodeIntegrationInSubFrames is off), so a link inside an iframe still opens a pane.
+document.addEventListener('auxclick', (e) => {
+  try {
+    if (e.button !== 1 || !e.ctrlKey || e.altKey || e.shiftKey || e.metaKey) return;
+    const a = e.target && e.target.closest && e.target.closest('a[href]');
+    if (!a) return;
+    let href = a.href;
+    if (href && typeof href !== 'string') href = href.baseVal;          // SVG <a> gives an SVGAnimatedString
+    if (!href) return;
+    href = new URL(href, location.href).href;                           // resolve relative hrefs / <base>
+    if (!/^(https?:|file:|about:)/i.test(href)) return;                 // skip javascript:, mailto:, blob:, ...
+    e.preventDefault();                                                 // stop Chromium opening it as a pane
+    e.stopPropagation();
+    ipcRenderer.sendToHost('nav:newtab', href);
+  } catch (x) { /* never break the page */ }
+}, true);
+
 // ---- autofill: tell the host when a login field is focused, so the vault can offer to prefill.
 // A text/email field only counts if the page also has a password field (i.e. it's a login page),
 // which keeps this quiet on search boxes and the like.

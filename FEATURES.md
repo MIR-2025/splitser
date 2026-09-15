@@ -28,7 +28,7 @@ login doesn't hand a third-party extension read/write access across every site y
   Sizes persist per layout. Dragging works over a page because a full-window shield overlays
   the webviews for the duration of the drag.
 - **Sets (workspaces):** a *set* is a whole independent grid of panes with its own layout.
-  `Ctrl+T` (or **+ Workspace** in the top **Workspaces** bar) opens a **new set** — a fresh
+  **+ Workspace** in the top **Workspaces** bar opens a **new set** — a fresh
   two-pane grid — and switches to it; click a pill to switch, its `×` to close a set. Each set
   stays in the DOM while you're on another (hidden, **webviews kept alive** — audio keeps
   playing, page state is preserved). **Named:** each pill shows a favicon + a name (auto-derived
@@ -36,6 +36,14 @@ login doesn't hand a third-party extension read/write access across every site y
   its pills across rows like the Split Screen extension. Every set's name, layout, panes, tabs,
   and the active set all restore with the session. This is the three-level hierarchy:
   **sets → panes → tabs**.
+- **Open from the command line / as the default browser:** Splitser takes a single-instance lock, so
+  `splitser <url>` on an already-running instance hands the URL to that window instead of starting a
+  second one. Plain `splitser <url>` adds it as a **new pane in the workspace you're looking at** —
+  the right thing for "open this link". **`splitser --new-workspace [url]`** instead creates a **new
+  single-pane workspace** and switches to it, leaving the workspace you were on exactly as it was —
+  the right thing for anything scripted or automated. With no URL it lands on the home page with the
+  address bar focused. Both forms work on a cold launch as well as a hand-off. Only `http://` and
+  `https://` URLs are recognised.
 - **Per-workspace theme:** each set carries its own colours/backdrop; a new set inherits the
   current look then diverges. Persists per set.
 - **Private (incognito) workspaces:** the 🕶 button in the Workspaces bar (or `Ctrl+Shift+N`)
@@ -54,7 +62,15 @@ login doesn't hand a third-party extension read/write access across every site y
   colour, so tabs group at a glance). Right-click a tab to override that site's colour with a swatch,
   or reset to Auto; overrides persist.
 - Per-pane toolbar: back / forward / reload, favicon, address bar, bookmark star, split, close.
-- `target=_blank` / `window.open` opens a **new pane**, not an OS window.
+- `target=_blank` / `window.open` opens a **new pane**, not an OS window. Plain **middle-click**
+  a link does the same (a new pane) — and **`Ctrl`+middle-click** opens it as a **new tab in the
+  pane you clicked in** instead, for when you want the link beside the page rather than beside the
+  pane. It can't be done in `main`: plain middle-click and
+  `Ctrl`+click both reach `setWindowOpenHandler` as disposition `background-tab` and that callback
+  carries no modifier keys, so `webview-preload.cjs` catches the `auxclick`
+  (`button === 1 && ctrlKey`), cancels the default — otherwise Chromium opens a pane — and hands the
+  URL to the host renderer, which owns the webview and therefore knows the pane. Main-frame only
+  (`nodeIntegrationInSubFrames` is off), so a link *inside an iframe* still opens a pane.
 - **Roadmap:** free-form nested 2-D splits — splitting *any* pane into arbitrary rows/columns
   (the built layouts are columns, grids up to 3×3, and the 1+2 shape, all resizable).
 
@@ -110,6 +126,16 @@ login doesn't hand a third-party extension read/write access across every site y
 - **About & support** — click the **Splitser** label in the footer for the app's build version, a
   `splitser.org` link, and a **Support Splitser** button that opens a Stripe pay-what-you-want donation
   checkout in a new tab.
+- **Task manager** (📊 in the footer) — every tab in every workspace, sorted by resident memory, with
+  the workspace + pane it lives in, **cumulative CPU** (seconds since the process started — the column
+  that catches a hidden tab quietly burning a core for days), live CPU%, and an audible marker. Per row:
+  **Reload** (hands the memory back without losing the tab) and click-to-jump. It **measures, it does not
+  manage** — nothing is discarded or throttled on your behalf; see "It's not a leak. It's a decision."
+  Totals are honest about the join: a renderer process shared by several tabs is counted **once**, and
+  cross-origin iframe processes, which belong to no tab, are listed separately as unattributed — so the
+  panel's total reconciles with `ps` instead of double-counting.
+- **Tab hover cards** — hovering a tab shows a styled card (title, URL, and that tab's **memory**) instead
+  of the OS tooltip, the way Brave/Chrome surface per-tab memory.
 - All local: JSON in the app's userData. No server, no account, no sync, no telemetry.
 
 ## Password vault — Built

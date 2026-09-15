@@ -22,6 +22,7 @@ let panes = [];               // mirror of cur.panes
 let activePane = null;        // mirror of cur.activePane
 let currentLayout = 'cols';   // mirror of cur.layout: 'cols' | 'g2x2' | 'g3x3'
 let SETTINGS = { home: 'https://duckduckgo.com', search: 'https://duckduckgo.com/?q=%s' };
+const tabIndex = new WeakMap();   // .tab element -> { tab, pane }, so hover/close handlers can find the tab behind a DOM node
 
 function normalize(s) {
   s = s.trim();
@@ -528,6 +529,7 @@ function addTab(pane, url) {
   pane.tabstrip.insertBefore(tabEl, pane.tabstrip.querySelector('.newtab'));
 
   const tab = { view, tabEl, title: 'New tab', favicon: '', realFavicon: '', url: url || '', zoom: 1, muted: false, loading: false, audio: false };
+  tabIndex.set(tabEl, { tab, pane });   // lets the delegated hover-card handler find this tab from its DOM node
   const tclr = tabEl.querySelector('.tabclr');
   const tfav = tabEl.querySelector('.tabfav');
   const ttitle = tabEl.querySelector('.tabtitle');
@@ -553,7 +555,7 @@ function addTab(pane, url) {
   view.addEventListener('did-stop-loading', () => { tab.loading = false; tab.settled = true; tabEl.classList.remove('loading'); if (active()) { pane.spin.hidden = true; pane.syncAddr(); } const u = view.getURL(); if (/^https?:/.test(u) && !pane.incognito) api.historyAdd({ url: u, title: tab.title });
     if (/^file:\/\/.*\.(md|markdown)(\?|#|$)/i.test(u)) view.executeJavaScript('(' + mdViewerInject.toString() + ')()').catch(() => {});   // render local markdown
     else if (/^file:\/\//i.test(u) || /\.(txt|text|log|csv|tsv|json|xml|ya?ml|ini|conf|cfg|md5|sha\d*sums?)(\?|#|$)/i.test(u)) view.executeJavaScript('(' + plainTextThemeInject.toString() + ')()').catch(() => {}); });   // make raw text/plain readable
-  view.addEventListener('page-title-updated', (e) => { tab.title = e.title || tab.url; ttitle.textContent = tab.title; tabEl.title = tab.title; if (active()) updateTitle(); if (tab.settled) flagUnseen(pane, tab); });
+  view.addEventListener('page-title-updated', (e) => { tab.title = e.title || tab.url; ttitle.textContent = tab.title; if (active()) updateTitle(); if (tab.settled) flagUnseen(pane, tab); });   // no title= -- the hover card (below) is the tooltip now
   view.addEventListener('page-favicon-updated', (e) => { const f = (e.favicons || [])[0]; if (f) tab.realFavicon = f; syncFav(); });
   view.addEventListener('update-target-url', (e) => { hoverEl.textContent = e.url || ''; });
   view.addEventListener('found-in-page', (e) => { if (active()) { const r = e.result; pane.findCount.textContent = r.matches ? r.activeMatchOrdinal + '/' + r.matches : 'no matches'; } });
@@ -565,6 +567,7 @@ function addTab(pane, url) {
     else if (e.channel === 'vault:loginblur') Vault.hideFill(pane);
     else if (e.channel === 'pane-active') { activePane = pane; markActive(); closeCertPop(); closeShieldsPop(); closeFavPicker(); closeNavHistPop(); }   // clicked into a pane -> focus it + dismiss host popovers (webview clicks never reach the document's outside-close)
     else if (e.channel === 'zoom-wheel') { pane.setZoom(pane.zoom + ((e.args && e.args[0]) > 0 ? 0.1 : -0.1)); }   // Ctrl+scroll zoom
+    else if (e.channel === 'nav:newtab') { activePane = pane; addTab(pane, e.args[0]); markActive(); }   // Ctrl+middle-click a link -> a tab in THIS pane (plain middle-click still opens a pane)
   });
   tfav.addEventListener('error', () => { tfav.hidden = true; });
 
@@ -583,7 +586,7 @@ function openDevtoolsTab(pane, targetWcId, x, y) {
   const t = addTab(pane, 'about:blank');
   t.isDevtools = true; t.devtoolsTarget = targetWcId; t.title = 'DevTools';
   const label = t.tabEl.querySelector('.tabtitle'); if (label) label.textContent = 'DevTools';
-  t.tabEl.title = 'DevTools'; t.tabEl.classList.add('devtools-tab');
+  t.tabEl.classList.add('devtools-tab');   // t.title is already 'DevTools' -- the hover card reads that
   const wire = () => {
     let hostId; try { hostId = t.view.getWebContentsId(); } catch (e) { return false; }
     if (hostId == null) return false;
@@ -1275,6 +1278,18 @@ function handleShortcut(k) {
 }
 api.onShortcut(handleShortcut);
 api.onOpenPane((url) => { const p = makePane(url, active() ? active().el.nextElementSibling : null); rebuildGutters(); saveSession(); activePane = p; });
+// `splitser --new-workspace [url]` -> a brand-new SINGLE-pane workspace, switched to, leaving the
+// workspace you were looking at exactly as it was. onOpenPane above adds a pane to the CURRENT set,
+// which is right for "open this link" and wrong for anything scripted. Inherits the current theme,
+// same as Ctrl+Shift+N. With no URL it lands on the home page with the address bar focused.
+api.onOpenWorkspace((url) => {
+  if (cur) cur.activePane = activePane;
+  const inherit = Theme.current();
+  const s = buildSet('cols', [[url || SETTINGS.home]]);
+  s.theme = inherit;
+  switchSet(s); saveSession(); markActive();
+  if (!url) panes[0]?.addr.focus();   // no URL given -> you're about to type one
+});
 // live shield counts: route to whichever pane's ACTIVE tab this webContents is
 api.onShields((d) => { for (const s of sets) for (const p of s.panes) { if (p.activeTab && p.activeTab.wcId === d.wcId) { p.updateShield(d); return; } } });
 
@@ -1358,6 +1373,190 @@ function showAuthDialog(d) {
   [user, pass].forEach((el) => el.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); done(true); } else if (e.key === 'Escape') done(false); }));
 }
 
+// ================= what each tab costs: metrics cache, tab hover cards, task manager =================
+// One IPC round-trip feeds both readers, cached briefly so sweeping the mouse along a tabstrip can't
+// hammer main. See the 'metrics:get' handler in main.js for why a pid can hold several tabs and why
+// some renderer memory belongs to no tab at all -- both are surfaced here rather than smoothed over.
+let metricsCache = null, metricsAt = 0, metricsInflight = null;
+function metricsFresh(maxAgeMs) {
+  if (metricsCache && Date.now() - metricsAt < maxAgeMs) return Promise.resolve(metricsCache);
+  if (metricsInflight) return metricsInflight;
+  metricsInflight = api.metricsGet()
+    .then((m) => { metricsCache = m; metricsAt = Date.now(); metricsInflight = null; return m; })
+    .catch(() => { metricsInflight = null; return metricsCache; });   // a blip keeps the last good read
+  return metricsInflight;
+}
+const metricsFor = (wcId) => (metricsCache && wcId != null) ? (metricsCache.tabs.find((t) => t.wcId === wcId) || null) : null;
+
+const MEM_HOT = 500 * 1024, MEM_BLAZING = 1536 * 1024;   // KB: amber, then red
+const memClass = (kb) => kb == null ? '' : kb >= MEM_BLAZING ? 'blazing' : kb >= MEM_HOT ? 'hot' : '';
+const fmtMem = (kb) => kb == null ? '--' : kb >= 1048576 ? (kb / 1048576).toFixed(2) + ' GB' : Math.round(kb / 1024) + ' MB';
+function fmtCpu(sec) {   // cumulative CPU: the column that catches a tab quietly burning a core for days
+  if (sec == null) return '--';
+  if (sec >= 3600) return (sec / 3600).toFixed(1) + ' h';
+  if (sec >= 60) return Math.round(sec / 60) + ' m';
+  return Math.round(sec) + ' s';
+}
+function shortUrl(u) {
+  try {
+    const p = new URL(u);
+    if (p.protocol === 'file:') return decodeURIComponent(p.pathname);   // a local file reads as its path, not "file:/..."
+    return (p.hostname || p.protocol) + (p.pathname === '/' ? '' : p.pathname);
+  } catch (e) { return u || ''; }
+}
+const tabUrl = (t) => { try { return (t.view && t.view.getURL && t.view.getURL()) || t.url || ''; } catch (e) { return t.url || ''; } };
+// The tab's own `title` only moves on page-title-updated, which never fires for some pages (a
+// file:// view can be titled before the listener is attached), so prefer main's live getTitle().
+function tabLabel(tab, m) {
+  const u = tabUrl(tab);
+  if (!u || u === 'about:blank') return (tab.title && tab.title !== 'New tab') ? tab.title : 'New tab';
+  return (m && m.title) || tab.title || shortUrl(u);
+}
+
+// ---- tab hover card: replaces the native title= tooltip, and carries the tab's memory the way
+// Brave/Chrome do. Fixed-position on <body> so a pane's overflow can't clip it, pointer-events:none
+// so it can never swallow the click on the tab underneath it. ----
+const hoverCard = document.createElement('div');
+hoverCard.className = 'hovercard'; hoverCard.hidden = true;
+hoverCard.innerHTML = '<div class="hc-title"></div><div class="hc-url"></div>' +
+  '<div class="hc-meta"><span class="hc-mem"></span><span class="hc-audio" hidden>&#9835; audio</span></div>';
+document.body.appendChild(hoverCard);
+const hcTitle = hoverCard.querySelector('.hc-title'), hcUrl = hoverCard.querySelector('.hc-url');
+const hcMem = hoverCard.querySelector('.hc-mem'), hcAudio = hoverCard.querySelector('.hc-audio');
+let hcTimer = 0, hcFor = null;
+
+function hideHoverCard() { clearTimeout(hcTimer); hcFor = null; hoverCard.classList.remove('show'); hoverCard.hidden = true; }
+function paintHoverCard(tab) {
+  const m = metricsFor(tab.wcId), kb = m ? m.rssKB : null;
+  // textContent throughout: a page controls its own title, and this is the privileged frame
+  hcTitle.textContent = tabLabel(tab, m);
+  hcUrl.textContent = shortUrl(tabUrl(tab));
+  hcMem.className = ('hc-mem ' + memClass(kb)).trim();
+  hcMem.textContent = kb == null ? 'memory --' : fmtMem(kb) + (m.shared > 1 ? ' · shared by ' + m.shared : '');
+  hcAudio.hidden = !(m && m.audible);
+}
+function placeHoverCard(el) {
+  const r = el.getBoundingClientRect();
+  hoverCard.hidden = false;                                    // lay it out before measuring
+  const w = hoverCard.offsetWidth, h = hoverCard.offsetHeight;
+  let x = Math.min(r.left, window.innerWidth - 8 - w), y = r.bottom + 6;
+  if (y + h > window.innerHeight - 8) y = r.top - 6 - h;        // flip above rather than fall off-screen
+  hoverCard.style.left = Math.round(Math.max(8, x)) + 'px';
+  hoverCard.style.top = Math.round(Math.max(8, y)) + 'px';
+}
+document.addEventListener('mouseover', (e) => {
+  const el = e.target.closest && e.target.closest('.tab');
+  if (!el) return;
+  const entry = tabIndex.get(el);
+  if (!entry || hcFor === el) return;
+  clearTimeout(hcTimer); hcFor = el;
+  hcTimer = setTimeout(async () => {
+    if (hcFor !== el || !el.isConnected) return;
+    paintHoverCard(entry.tab); placeHoverCard(el); hoverCard.classList.add('show');   // show instantly from cache
+    await metricsFresh(2000);                                                         // then top up the number
+    if (hcFor === el) paintHoverCard(entry.tab);
+  }, 380);   // roughly Chrome's hover-card beat: long enough that scrubbing across tabs stays quiet
+});
+document.addEventListener('mouseout', (e) => {
+  const el = e.target.closest && e.target.closest('.tab');
+  if (el && hcFor === el && !el.contains(e.relatedTarget)) hideHoverCard();
+});
+document.addEventListener('mousedown', hideHoverCard, true);   // clicking a tab shouldn't leave the card stranded
+window.addEventListener('blur', hideHoverCard);
+
+// ---- task manager ----
+const panelTM = document.getElementById('panel-tasks');
+const tmList = document.getElementById('tm-list');
+const tmTotal = document.getElementById('tm-total');
+const tmFoot = document.getElementById('tm-foot');
+let tmTimer = 0;
+
+// Every tab in every workspace, with WHERE it lives. The workspace column is the useful one: a
+// workspace is exactly how a tab ends up unseen for days, which is how it gets to be the outlier.
+function tmRows() {
+  const out = [];
+  sets.forEach((s, si) => {
+    const label = setName(s, si);
+    s.panes.forEach((p, pi) => p.tabs.forEach((t) => out.push({ tab: t, pane: p, set: s, where: label + ' · pane ' + (pi + 1) })));
+  });
+  return out;
+}
+function tmGoto(r) {
+  if (r.set !== cur) switchSet(r.set);
+  r.set.activePane = r.pane; activePane = r.pane;
+  switchTab(r.pane, r.tab);
+  markActive(); hideHoverCard();
+}
+function renderTasks() {
+  const rows = tmRows().map((r) => ({ ...r, m: metricsFor(r.tab.wcId) }));
+  rows.sort((a, b) => ((b.m && b.m.rssKB) || 0) - ((a.m && a.m.rssKB) || 0));
+  tmList.textContent = '';
+  if (!rows.length) { const p = document.createElement('p'); p.className = 'empty'; p.textContent = 'No tabs open.'; tmList.appendChild(p); return; }
+
+  for (const r of rows) {
+    const kb = r.m ? r.m.rssKB : null;
+    const row = document.createElement('div');
+    row.className = ('tm-row ' + memClass(kb)).trim();
+
+    if (r.tab.favicon) { const i = document.createElement('img'); i.className = 'tm-fav'; i.src = r.tab.favicon; i.alt = ''; i.addEventListener('error', () => { i.className = 'tm-fav blank'; i.removeAttribute('src'); }); row.appendChild(i); }
+    else { const s = document.createElement('span'); s.className = 'tm-fav blank'; row.appendChild(s); }
+
+    const main = document.createElement('div'); main.className = 'tm-main';
+    const t = document.createElement('div'); t.className = 'tm-title'; t.textContent = tabLabel(r.tab, r.m);
+    const w = document.createElement('div'); w.className = 'tm-where';
+    w.textContent = r.where + (r.m && r.m.shared > 1 ? ' · shares a process with ' + (r.m.shared - 1) + ' more' : '');
+    main.append(t, w);
+    main.addEventListener('click', () => tmGoto(r));
+    row.appendChild(main);
+
+    if (r.m && r.m.audible) { const a = document.createElement('span'); a.className = 'tm-badge audio'; a.textContent = '♫'; row.appendChild(a); }
+
+    const nums = document.createElement('div'); nums.className = 'tm-nums';
+    const mem = document.createElement('span'); mem.className = 'tm-mem'; mem.textContent = fmtMem(kb);
+    const cpu = document.createElement('span'); cpu.className = 'tm-cpu';
+    const pct = r.m ? r.m.cpuPercent : null;
+    if (pct != null && pct >= 1) { cpu.classList.add('busy'); cpu.textContent = fmtCpu(r.m.cpuSeconds) + ' · ' + Math.round(pct) + '%'; }
+    else cpu.textContent = fmtCpu(r.m ? r.m.cpuSeconds : null);
+    nums.append(mem, cpu);
+    row.appendChild(nums);
+
+    const acts = document.createElement('div'); acts.className = 'tm-acts';
+    const rl = document.createElement('button'); rl.className = 'tm-act'; rl.textContent = 'Reload';
+    rl.title = 'Reload this tab -- hands its memory back without losing the tab';
+    rl.addEventListener('click', (ev) => { ev.stopPropagation(); try { r.tab.view.reload(); } catch (e) { /* gone */ } setTimeout(() => metricsFresh(0).then(() => { if (!panelTM.hidden) renderTasks(); }), 1200); });
+    acts.appendChild(rl);
+    row.appendChild(acts);
+
+    tmList.appendChild(row);
+  }
+
+  // Totals. A pid is counted ONCE even when several tabs live in it, so this reconciles with ps
+  // instead of double-counting shared processes into a number that looks worse than reality.
+  const m = metricsCache;
+  const seen = new Set(); let tabsKB = 0;
+  rows.forEach((r) => { if (r.m && !seen.has(r.m.pid)) { seen.add(r.m.pid); tabsKB += r.m.rssKB || 0; } });
+  tmTotal.textContent = rows.length + ' tabs · ' + sets.length + ' workspaces';
+  tmFoot.textContent = '';
+  const line = (label, value) => { const d = document.createElement('div'); d.append(label + ' '); const b = document.createElement('b'); b.textContent = value; d.appendChild(b); return d; };
+  tmFoot.appendChild(line('tabs (' + seen.size + ' processes):', fmtMem(tabsKB)));
+  if (m && m.unattributedCount) tmFoot.appendChild(line('cross-origin iframes (' + m.unattributedCount + ' processes, no tab owns them):', fmtMem(m.unattributedKB)));
+  if (m) tmFoot.appendChild(line('browser + GPU + everything else:', fmtMem(m.totalKB - tabsKB - (m.unattributedKB || 0))));
+  if (m) tmFoot.appendChild(line('Splitser total, ' + m.processCount + ' processes:', fmtMem(m.totalKB)));
+}
+async function tmTick() {
+  if (panelTM.hidden) { clearInterval(tmTimer); tmTimer = 0; return; }
+  await metricsFresh(0);          // forced: percentCPUUsage only means anything read repeatedly
+  if (!panelTM.hidden) renderTasks();
+}
+function openTasks() {
+  togglePanel(panelTM);
+  clearInterval(tmTimer); tmTimer = 0;
+  if (panelTM.hidden) return;
+  renderTasks();                  // paint from cache right away; the first read has no live CPU% yet
+  tmTick();
+  tmTimer = setInterval(tmTick, 2000);
+}
+
 // ---- status-bar panels: bookmarks / downloads / settings ----
 const panelBM = document.getElementById('panel-bookmarks');
 const panelDL = document.getElementById('panel-downloads');
@@ -1370,6 +1569,7 @@ function togglePanel(panel) {
 document.getElementById('btn-bookmarks').addEventListener('click', () => { renderBookmarks(); togglePanel(panelBM); });
 document.getElementById('btn-downloads').addEventListener('click', () => togglePanel(panelDL));
 document.getElementById('btn-settings').addEventListener('click', () => { fillSettings(); togglePanel(panelSet); });
+document.getElementById('btn-tasks').addEventListener('click', openTasks);
 
 // ---- About popover: click the "Splitser" footer brand -> build version + (prepped) donate link ----
 // To turn on the Donate button, set DONATE_URL to a Stripe Payment Link (https://buy.stripe.com/…)
