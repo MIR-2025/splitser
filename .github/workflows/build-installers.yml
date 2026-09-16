@@ -71,11 +71,19 @@ jobs:
             dist/*.exe
             dist/*.dmg
 
-  # On a v* tag: gather every platform's installers and publish one GitHub Release with them
-  # attached, so the repo's Releases page is a real download page (not just a bare tag).
+  # On a v* tag: gather whatever DID build and publish one GitHub Release with it attached,
+  # so the repo's Releases page is a real download page (not just a bare tag).
+  #
+  # `needs: build` on its own skips this job the moment ANY matrix leg fails, which is how
+  # v0.1.37 ended up with green Linux and Windows installers and no release at all -- one
+  # platform's signing problem held the other two hostage indefinitely. !cancelled() lets the
+  # release run on a partial matrix. It is NOT always(): a cancelled run should stay cancelled,
+  # and the check below still fails the job outright when nothing was produced, so a green
+  # release is never an empty one. The body says which platforms are missing, because a release
+  # that quietly ships three of five artifacts is the kind of unstated claim this project avoids.
   release:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/')
+    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write            # let GITHUB_TOKEN create the release + upload assets
@@ -84,9 +92,32 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           path: dist
+      - name: Note which platforms made it, and refuse to publish an empty release
+        id: manifest
+        shell: bash
+        run: |
+          have() { [ -n "$(find dist -type f -name "*$1" -print -quit 2>/dev/null)" ]; }
+          if ! (have .deb || have .rpm || have .AppImage || have .exe || have .dmg); then
+            echo "::error::no installers were produced by any platform -- nothing to release"
+            exit 1
+          fi
+          find dist -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \
+                            -o -name '*.exe' -o -name '*.dmg' \) -printf '  %f\n' | sort
+          {
+            echo 'body<<GHEOF'
+            echo '### Installers in this release'
+            echo
+            for pair in 'deb:Linux .deb' 'rpm:Linux .rpm' 'AppImage:Linux .AppImage' \
+                        'exe:Windows .exe' 'dmg:macOS .dmg'; do
+              ext="${pair%%:*}"; label="${pair#*:}"
+              if have ".$ext"; then echo "- $label"; else echo "- $label -- **not built for this release**"; fi
+            done
+            echo 'GHEOF'
+          } >> "$GITHUB_OUTPUT"
       - name: Publish GitHub Release with the installers attached
         uses: softprops/action-gh-release@v3
         with:
+          body: ${{ steps.manifest.outputs.body }}
           files: |
             dist/**/*.deb
             dist/**/*.rpm
