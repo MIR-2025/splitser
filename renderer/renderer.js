@@ -547,12 +547,28 @@ function addTab(pane, url) {
     syncColor();
   };
   tab.syncFav = syncFav;
+  // Some pages never fire page-title-updated -- a file:// view is titled from its filename before
+  // this listener is attached -- so the tabstrip said "New tab" while the hover card and the task
+  // manager, which read main's live getTitle(), showed the real one. Pull the title off the guest
+  // once it settles. Idempotent, and it cannot clobber a real title: if the page announced one,
+  // getTitle() returns that same string and this returns early.
+  const adoptTitle = () => {
+    if (tab.isDevtools) return;                 // that tab's label is ours, not the page's
+    try {
+      const u = view.getURL() || '';
+      if (!u || u === 'about:blank') return;    // "New tab" is the right label for a blank tab
+      const t = (view.getTitle() || '').trim();
+      if (!t || t === u || t === tab.title) return;   // Chromium falls back to the URL when untitled
+      tab.title = t; ttitle.textContent = t;
+      if (active()) updateTitle();
+    } catch (e) { /* not attached yet */ }
+  };
 
   view.addEventListener('did-navigate', () => { tab.url = view.getURL(); tab.realFavicon = ''; tab.drm = isDrmHost(tab.url); tab.certError = null; if (tab.settled) flagUnseen(pane, tab); tab.settled = false; syncFav(); if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); pane.syncDrmNote(); pane.syncCertError(); pane.updateLock(); } saveSession(); });
   view.addEventListener('did-navigate-in-page', () => { tab.url = view.getURL(); if (active()) pane.syncAddr(); });
-  view.addEventListener('dom-ready', () => { try { tab.wcId = view.getWebContentsId(); } catch (e) { /* not attached yet */ } if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); pane.refreshShield(); } });
+  view.addEventListener('dom-ready', () => { try { tab.wcId = view.getWebContentsId(); } catch (e) { /* not attached yet */ } adoptTitle(); if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); pane.refreshShield(); } });
   view.addEventListener('did-start-loading', () => { tab.loading = true; tab.drm = false; try { tab.wcId = view.getWebContentsId(); } catch (e) { /* not attached yet */ } tab.certError = null; tabEl.classList.add('loading'); if (active()) { pane.spin.hidden = false; pane.syncDrmNote(); pane.syncCertError(); } });
-  view.addEventListener('did-stop-loading', () => { tab.loading = false; tab.settled = true; tabEl.classList.remove('loading'); if (active()) { pane.spin.hidden = true; pane.syncAddr(); } const u = view.getURL(); if (/^https?:/.test(u) && !pane.incognito) api.historyAdd({ url: u, title: tab.title });
+  view.addEventListener('did-stop-loading', () => { tab.loading = false; tab.settled = true; tabEl.classList.remove('loading'); adoptTitle(); if (active()) { pane.spin.hidden = true; pane.syncAddr(); } const u = view.getURL(); if (/^https?:/.test(u) && !pane.incognito) api.historyAdd({ url: u, title: tab.title });   // adoptTitle first, so history records the real title too
     if (/^file:\/\/.*\.(md|markdown)(\?|#|$)/i.test(u)) view.executeJavaScript('(' + mdViewerInject.toString() + ')()').catch(() => {});   // render local markdown
     else if (/^file:\/\//i.test(u) || /\.(txt|text|log|csv|tsv|json|xml|ya?ml|ini|conf|cfg|md5|sha\d*sums?)(\?|#|$)/i.test(u)) view.executeJavaScript('(' + plainTextThemeInject.toString() + ')()').catch(() => {}); });   // make raw text/plain readable
   view.addEventListener('page-title-updated', (e) => { tab.title = e.title || tab.url; ttitle.textContent = tab.title; if (active()) updateTitle(); if (tab.settled) flagUnseen(pane, tab); });   // no title= -- the hover card (below) is the tooltip now

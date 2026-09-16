@@ -6,6 +6,18 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.38 — 2026-09-16
+### Fixed
+- **A `file://` tab now shows the file's name instead of "New tab".** Chromium titles a local file
+  from its filename before the renderer's `page-title-updated` listener is attached, so the event
+  never arrives and the tab label never moved off its placeholder. 0.1.37 made the mismatch visible:
+  the hover card and the task manager read the live title from the main process and showed
+  `README.md` while the tab beside them still said "New tab". The tab now reads the title off the
+  page once it settles. A blank tab is still "New tab" rather than "about:blank", and an untitled
+  page is not labelled with its own URL.
+- **History records the real title for those pages too**, since it was storing whatever the tab label
+  happened to be at the time.
+
 ## 0.1.37 — 2026-09-15
 ### Added
 - **Task manager** (📊 in the footer) -- every tab in every workspace, sorted by resident memory, with
