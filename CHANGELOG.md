@@ -6,6 +6,38 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.41 — 2026-09-28
+### Added
+- **Fingerprint farbling for canvas, WebGL and audio.** Sites can identify a browser by making it
+  draw something and hashing the result -- the output varies by GPU, driver and font stack finely
+  enough to be a serial number that survives clearing cookies. Splitser now perturbs those readings
+  per site, per session: canvas gets low-bit noise on colour channels, WebGL reports a generic
+  vendor/renderer instead of the real GPU, and the offline-render path used for audio fingerprinting
+  gets inaudible noise. The noise is deterministic for a given site within a session -- a site that
+  reads the same canvas twice sees the same answer, because varying it per call is itself a signal
+  and breaks pages that legitimately re-read pixels -- and reseeds on restart, so the value cannot
+  be used to recognise you tomorrow.
+- Follows Shields, including the per-site allowlist. Dropping shields on a site also stops the
+  farbling there, which is the escape hatch if a canvas-heavy app misbehaves.
+
+### Fixed
+- **The user agent leaked Chromium's true build number.** Real Chrome has frozen the version tail to
+  `<major>.0.0.0` since User-Agent Reduction, but Electron reports the real build, so Splitser sent
+  `Chrome/150.0.7871.224` -- a string no real Chrome emits, which both pinned the exact build and
+  flagged the browser as not-Chrome. amiunique.org scored it 0.00% similarity, i.e. unique. Now
+  reported as `<major>.0.0.0`.
+- **`navigator.userAgentData` leaked it too, separately.** `getHighEntropyValues()` still returned
+  the true build after the UA string was clean, and the brands list omitted "Google Chrome", which
+  identifies Chromium on its own. Both normalised. Unlike the farbling these are unconditional and
+  not gated on Shields: presenting as Chrome is about not standing out, not about adding noise.
+
+### Known limits
+- Farbling is a JavaScript-level patch, not a Blink-level one. A page can read around it by taking a
+  pristine prototype from a fresh iframe, and **Web Workers are not covered at all** -- a worker has
+  its own global scope that a preload cannot reach. Fingerprinters that measure inside a worker
+  (browserleaks.com does) still see the real values. This raises the cost of commercial
+  fingerprinting; it does not defeat a deliberate bypass.
+
 ## 0.1.38 — 2026-09-16
 ### Fixed
 - **A `file://` tab now shows the file's name instead of "New tab".** Chromium titles a local file

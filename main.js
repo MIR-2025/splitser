@@ -4,6 +4,7 @@
 import { app, BrowserWindow, ipcMain, session as electronSession, dialog, shell, clipboard, nativeImage, webContents, Menu, screen } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { ElectronBlocker, fromElectronDetails } from '@ghostery/adblocker-electron';
 import * as store from './store.js';
@@ -44,6 +45,10 @@ const _sh = store.getShields();
 const allow = new Set(_sh.allow || []);          // hosts with shields DOWN
 let shieldsOn = _sh.on !== false;                // global default
 const blocked = new Map();                       // webContentsId -> count on the current page
+// Farbling seed: fresh every launch, so a fingerprint is stable WITHIN a session (sites that
+// legitimately re-read a canvas see consistent values) and different across them. The per-site
+// seed is derived in the preload from this plus the site, so two sites never see the same noise.
+const FARBLE_SEED = randomBytes(8).toString('hex');
 const pushT = new Map();
 function hostOf(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } }
 function wcHost(id) { const wc = id ? webContents.fromId(id) : null; return wc && !wc.isDestroyed() ? hostOf(wc.getURL()) : ''; }
@@ -185,6 +190,12 @@ function createWindow() {
 }
 
 // ---- data-layer IPC ----
+// The webview preload asks once, synchronously, before any page script runs. Farbling follows
+// shields: global off, or this site allowlisted, means no noise -- one control, not two.
+ipcMain.on('farble:init', (e, host) => {
+  const h = String(host || '').replace(/^www\./, '');
+  e.returnValue = { seed: FARBLE_SEED, on: shieldsOn && !allow.has(h) };
+});
 ipcMain.on('history:add', (_e, { url, title }) => store.addHistory(url, title));
 ipcMain.handle('history:query', (_e, q) => store.queryHistory(q));
 ipcMain.handle('bookmarks:get', () => store.getBookmarks());
@@ -528,7 +539,14 @@ app.whenReady().then(() => {
   if (!gotSingleLock) return;   // a non-primary instance is quitting -- don't build a session/window
   // Present as vanilla Chrome: drop the "Splitser/x" and "Electron/x" UA tokens. Some sites (Google
   // sign-in, banks) refuse or degrade for anything advertising Electron -- bad for a logged-in-apps browser.
-  app.userAgentFallback = app.userAgentFallback.replace(/ (Splitser|Electron)\/\S+/g, '');
+  // ...and freeze the Chrome version tail to 0.0.0. Real Chrome has done this since User-Agent
+  // Reduction; Electron does not, so it leaks Chromium's TRUE build (e.g. Chrome/150.0.7871.224).
+  // That is worse than the Electron token it replaces: no real Chrome emits a build number there,
+  // so it both pins the exact build AND flags the browser as not-Chrome. amiunique.org scored that
+  // string 0.00% similarity -- a sharper identifier than the canvas farbling was hiding.
+  app.userAgentFallback = app.userAgentFallback
+    .replace(/ (Splitser|Electron)\/\S+/g, '')
+    .replace(/(Chrome\/\d+)\.[\d.]+/, '$1.0.0.0');
 
   initAdblock();   // engine loads async; the per-session handler no-ops until ready
 
