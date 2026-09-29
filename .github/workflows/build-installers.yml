@@ -39,22 +39,39 @@ jobs:
       - name: Pin npm (avoid the broken npm@12 line)
         run: npm i -g npm@11
       - run: npm ci
-      - name: Build installers (retry -- macOS hdiutil detach is intermittently flaky)
+      # Retry ONLY genuinely transient failures. `hdiutil detach ... busy` is one: a dmg volume
+      # can still be mounted when the next attempt starts. A code-signing failure is NOT -- it is
+      # the same wrong credential every time, so retrying it just burns three runners and reports
+      # the wrong cause. This step used to retry everything under an "hdiutil is flaky" label,
+      # which hid a signing break from 0.1.37 onward behind a message about disk images.
+      - name: Build installers
         shell: bash
         run: |
           n=0
-          until npx electron-builder ${{ matrix.targets }} --publish never; do
+          log=$(mktemp)
+          until npx electron-builder ${{ matrix.targets }} --publish never 2>&1 | tee "$log"; do
+            if grep -q 'set-key-partition-list\|No identity found\|Command failed: /usr/bin/security' "$log"; then
+              echo "::error::macOS code signing failed -- this is a credential problem, not a flaky runner."
+              echo "::error::'security set-key-partition-list' fails when the .p12 has no PRIVATE KEY in it"
+              echo "::error::(exported from Keychain Access without the key), or CSC_KEY_PASSWORD is wrong."
+              echo "::error::Check locally: openssl pkcs12 -in <cert>.p12 -nocerts -nodes -passin pass:'<pw>' | grep -c 'PRIVATE KEY'"
+              echo "::error::0 = no key in the bundle. Re-export WITH the private key. Not retried: it is deterministic."
+              exit 1
+            fi
             n=$((n+1)); if [ "$n" -ge 3 ]; then echo "build failed after $n attempts"; exit 1; fi
-            echo "::warning::build attempt $n failed; freeing any stuck Splitser dmg volume, retrying"
+            echo "::warning::build attempt $n failed (transient); freeing any stuck Splitser dmg volume, retrying"
             hdiutil detach -force /Volumes/Splitser* 2>/dev/null || true
             sleep 15
           done
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # macOS code-signing + notarization. Scoped to the mac jobs so a mac .p12 never
-          # reaches the Windows job (CSC_LINK drives Windows signing too). Entirely inert until
-          # the repo secrets below exist: electron-builder skips signing when CSC_LINK is empty,
-          # and notarization only runs on a signed app -- so unsigned builds stay green meanwhile.
+          # reaches the Windows job (CSC_LINK drives Windows signing too). Inert only while
+          # SPLITSER_MAC is UNSET -- electron-builder skips signing when CSC_LINK is empty.
+          # Once that secret exists it signs for real and a bad cert FAILS the build: mac went
+          # green -> red at 0.1.37 for exactly that reason and stayed red, while the step label
+          # blamed hdiutil. If you want unsigned mac builds back, delete the SPLITSER_MAC secret
+          # rather than editing this block.
           CSC_LINK: ${{ startsWith(matrix.os, 'macos') && secrets.SPLITSER_MAC || '' }}
           CSC_KEY_PASSWORD: ${{ startsWith(matrix.os, 'macos') && secrets.SPLITSER_MAC_CSC_PASSWORD || '' }}
           APPLE_ID: ${{ startsWith(matrix.os, 'macos') && secrets.SPLITSER_APPLE_ID || '' }}
