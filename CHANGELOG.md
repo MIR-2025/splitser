@@ -6,6 +6,18 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
+## 0.1.42 — 2026-10-05
+### Added
+- **A live size readout while you resize a pane.** Drag any divider and each pane that is
+  changing size shows its `W × H` in pixels, centred, updating as you drag. Only the panes the
+  drag actually moves get one, so dragging a single divider in a 3×3 grid labels the two panes
+  it moved rather than all nine. Works on every resize path -- column gutters, grid dividers on
+  both axes, the diagonal crossing handle, and both split-tree drags -- because one helper
+  measures the panes rather than each path computing its own numbers.
+- The readouts are drawn inside the drag shield rather than inside the panes: the shield is
+  fixed above everything, so a readout can never end up beneath a `<webview>`'s composited
+  surface, and removing the shield on mouse-up disposes of them.
+
 ## 0.1.41 — 2026-09-28
 ### Added
 - **Fingerprint farbling for canvas, WebGL and audio.** Sites can identify a browser by making it

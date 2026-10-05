@@ -753,6 +753,45 @@ function renderShieldsPop(pane) {
   pop.querySelector('.sp-all').onchange = async () => { await api.shieldsToggleAll(); if (pane.view) pane.view.reload(); setTimeout(() => pane.refreshShield(), 400); };
   setTimeout(() => document.addEventListener('mousedown', function h(e) { if (!pop.contains(e.target) && e.target !== pane.shieldBtn) { closeShieldsPop(); document.removeEventListener('mousedown', h); } }), 0);
 }
+// ---- live size readout while a divider is dragged --------------------------------
+// All five resize paths (columns, grid single-axis, grid diagonal, split tree, split
+// intersection) end up moving real DOM panes, so one helper that MEASURES the panes
+// serves all of them -- no path has to compute its own numbers, and none can drift.
+//
+// The badges live inside the .drag-shield rather than inside the panes: the shield is
+// position:fixed at z-index 9999, so a readout can never end up under a <webview>'s
+// composited surface, and removing the shield on mouseup disposes of them for free.
+//
+// Only panes whose size actually CHANGED get a badge, so dragging one divider in a 3x3
+// grid lights up the two panes it moved instead of all nine.
+let sizeHud = null;
+function sizeHudStart(shield, list) {
+  const ps = list || panes;
+  sizeHud = ps.map((p) => {
+    const r = p.el.getBoundingClientRect();
+    const b = document.createElement('div');
+    b.className = 'size-hud';
+    shield.appendChild(b);
+    return { pane: p, badge: b, w0: Math.round(r.width), h0: Math.round(r.height) };
+  });
+  sizeHudUpdate();
+}
+function sizeHudUpdate() {
+  if (!sizeHud) return;
+  for (const e of sizeHud) {
+    const r = e.pane.el.getBoundingClientRect();
+    const w = Math.round(r.width), h = Math.round(r.height);
+    // 2px of slack: a flex/fr reflow can jitter a pane by a sub-pixel without the user
+    // having resized it, and a badge that blinks on untouched panes is just noise.
+    if (Math.abs(w - e.w0) < 2 && Math.abs(h - e.h0) < 2) { e.badge.classList.remove('show'); continue; }
+    e.badge.textContent = w + ' × ' + h;
+    e.badge.style.left = Math.round(r.left + r.width / 2) + 'px';
+    e.badge.style.top = Math.round(r.top + r.height / 2) + 'px';
+    e.badge.classList.add('show');
+  }
+}
+const sizeHudEnd = () => { sizeHud = null; };   // the shield's removal takes the badges with it
+
 function startDrag(e) {
   e.preventDefault();
   const g = e.currentTarget, leftEl = g.previousElementSibling, rightEl = g.nextElementSibling;
@@ -761,13 +800,15 @@ function startDrag(e) {
   const combinedGrow = (parseFloat(leftEl.style.flexGrow) || 1) + (parseFloat(rightEl.style.flexGrow) || 1);
   const startX = e.clientX, startLeftPx = leftEl.offsetWidth;
   const shield = document.createElement('div'); shield.className = 'drag-shield'; document.body.appendChild(shield);
+  sizeHudStart(shield);
   const onMove = (ev) => {
     let leftPx = Math.max(90, Math.min(combinedPx - 90, startLeftPx + (ev.clientX - startX)));
     const ratio = leftPx / combinedPx;
     leftEl.style.flexGrow = (combinedGrow * ratio).toFixed(4);
     rightEl.style.flexGrow = (combinedGrow * (1 - ratio)).toFixed(4);
+    sizeHudUpdate();
   };
-  const onUp = () => { shield.remove(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
+  const onUp = () => { sizeHudEnd(); shield.remove(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
   window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
 }
 function updateTitle() { const p = active(); document.title = (p && p.title) ? p.title + ' — Splitser' : 'Splitser'; }
@@ -839,12 +880,14 @@ function startGridDrag(e, axis, idx) {
   const start = axis === 'x' ? e.clientX : e.clientY;
   const a0 = arr[idx], combined = arr[idx] + arr[idx + 1];
   const shield = document.createElement('div'); shield.className = 'drag-shield'; shield.style.cursor = axis === 'x' ? 'col-resize' : 'row-resize'; document.body.appendChild(shield);
+  sizeHudStart(shield);
   const onMove = (ev) => {
     const d = ((axis === 'x' ? ev.clientX : ev.clientY) - start) / frPx;
     arr[idx] = Math.max(minFr, Math.min(combined - minFr, a0 + d)); arr[idx + 1] = combined - arr[idx];
     if (axis === 'x') box.style.gridTemplateColumns = frTpl(cur.gCols); else box.style.gridTemplateRows = frTpl(cur.gRows);
+    sizeHudUpdate();
   };
-  const onUp = () => { shield.remove(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); frSave(cur.layout + (axis === 'x' ? '-c' : '-r'), arr); };
+  const onUp = () => { sizeHudEnd(); shield.remove(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); frSave(cur.layout + (axis === 'x' ? '-c' : '-r'), arr); };
   window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
 }
 // diagonal drag: the handle at (column-divider ci, row-divider ri) reproportions both axes at once
@@ -859,13 +902,15 @@ function startGridDragXY(e, ci, ri) {
   const cx0 = cur.gCols[ci], combX = cur.gCols[ci] + cur.gCols[ci + 1];
   const cy0 = cur.gRows[ri], combY = cur.gRows[ri] + cur.gRows[ri + 1];
   const shield = document.createElement('div'); shield.className = 'drag-shield'; shield.style.cursor = 'move'; document.body.appendChild(shield);
+  sizeHudStart(shield);
   const onMove = (ev) => {
     cur.gCols[ci] = Math.max(minX, Math.min(combX - minX, cx0 + (ev.clientX - sx) / X.frPx)); cur.gCols[ci + 1] = combX - cur.gCols[ci];
     cur.gRows[ri] = Math.max(minY, Math.min(combY - minY, cy0 + (ev.clientY - sy) / Y.frPx)); cur.gRows[ri + 1] = combY - cur.gRows[ri];
     box.style.gridTemplateColumns = frTpl(cur.gCols);
     box.style.gridTemplateRows = frTpl(cur.gRows);
+    sizeHudUpdate();
   };
-  const onUp = () => { shield.remove(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); frSave(cur.layout + '-c', cur.gCols); frSave(cur.layout + '-r', cur.gRows); };
+  const onUp = () => { sizeHudEnd(); shield.remove(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); frSave(cur.layout + '-c', cur.gCols); frSave(cur.layout + '-r', cur.gRows); };
   window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
 }
 
@@ -968,26 +1013,30 @@ function applySplitTree(s) {
 function startSplitDrag(e, s, d) {
   e.preventDefault();
   const shield = document.createElement('div'); shield.className = 'drag-shield'; shield.style.cursor = d.dir === 'row' ? 'col-resize' : 'row-resize'; document.body.appendChild(shield);
+  sizeHudStart(shield, s.panes);
   const onMove = (ev) => {
     const r = s.el.getBoundingClientRect();
     if (d.dir === 'row') { const mx = (ev.clientX - r.left) / r.width; d.node.ratio = Math.max(0.05, Math.min(0.95, (mx - d.x0) / (d.x1 - d.x0))); }
     else { const my = (ev.clientY - r.top) / r.height; d.node.ratio = Math.max(0.05, Math.min(0.95, (my - d.y0) / (d.y1 - d.y0))); }
     applySplitTree(s);   // grid-area recompute -- panes don't reload
+    sizeHudUpdate();
   };
-  const onUp = () => { shield.remove(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); saveSession(); };
+  const onUp = () => { sizeHudEnd(); shield.remove(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); saveSession(); };
   window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
 }
 function startSplitDragXY(e, s, rows, cols) {   // drag an intersection -> resize both axes at once
   e.preventDefault();
   const shield = document.createElement('div'); shield.className = 'drag-shield'; shield.style.cursor = 'move'; document.body.appendChild(shield);
+  sizeHudStart(shield, s.panes);
   const onMove = (ev) => {
     const r = s.el.getBoundingClientRect();
     const mx = (ev.clientX - r.left) / r.width, my = (ev.clientY - r.top) / r.height;
     rows.forEach((d) => { d.node.ratio = Math.max(0.05, Math.min(0.95, (mx - d.x0) / (d.x1 - d.x0))); });
     cols.forEach((d) => { d.node.ratio = Math.max(0.05, Math.min(0.95, (my - d.y0) / (d.y1 - d.y0))); });
     applySplitTree(s);
+    sizeHudUpdate();
   };
-  const onUp = () => { shield.remove(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); saveSession(); };
+  const onUp = () => { sizeHudEnd(); shield.remove(); window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); saveSession(); };
   window.addEventListener('mousemove', onMove); window.addEventListener('mouseup', onUp);
 }
 function st_rowTree(ps) { return ps.length === 1 ? { pane: ps[0] } : { dir: 'row', ratio: 1 / ps.length, a: { pane: ps[0] }, b: st_rowTree(ps.slice(1)) }; }

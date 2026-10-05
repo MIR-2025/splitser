@@ -26,7 +26,9 @@ login doesn't hand a third-party extension read/write access across every site y
   column across all rows, a row divider resizes that row across all columns), plus a
   **diagonal handle at each divider crossing** that reproportions both axes in one drag.
   Sizes persist per layout. Dragging works over a page because a full-window shield overlays
-  the webviews for the duration of the drag.
+  the webviews for the duration of the drag. While you drag, each pane that is actually
+  changing size shows a live **`W × H` pixel readout** centred in it -- only the panes the
+  drag moves, so one divider in a 3×3 doesn't light up all nine.
 - **Sets (workspaces):** a *set* is a whole independent grid of panes with its own layout.
   **+ Workspace** in the top **Workspaces** bar opens a **new set** — a fresh
   two-pane grid — and switches to it; click a pill to switch, its `×` to close a set. Each set

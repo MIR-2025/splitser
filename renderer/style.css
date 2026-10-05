@@ -95,6 +95,22 @@ body{
 .gutter::after{content:"";position:absolute;inset:0 -4px;} /* fatter hit target */
 .drag-shield{position:fixed;inset:0;z-index:9999;cursor:col-resize}
 
+/* Live W x H readout while a divider is dragged. These live INSIDE .drag-shield, not
+   inside the pane: the shield is fixed at z-index 9999, so a readout can never end up
+   under a <webview>'s composited surface, and removing the shield disposes of them.
+   Positioned per-pane in viewport coords by sizeHudUpdate(). */
+.size-hud{
+  position:fixed; z-index:1; /* above the shield's own background, below nothing else */
+  padding:6px 14px; border-radius:20px;
+  background:rgba(18,24,30,.92); color:#fff; border:1px solid var(--line-2);
+  font:600 14px/1 ui-monospace,Menlo,monospace; letter-spacing:.02em; white-space:nowrap;
+  box-shadow:0 6px 20px rgba(0,0,0,.45);
+  opacity:0; pointer-events:none;
+  transform:translate(-50%,-50%) scale(.96);
+  transition:opacity .09s ease, transform .09s ease;
+}
+.size-hud.show{ opacity:1; transform:translate(-50%,-50%) scale(1); }
+
 /* draggable grid dividers (occupy the 6px divider tracks; both axes) */
 .gdiv{ background:var(--line); z-index:2; }
 .gdiv.x{ cursor:col-resize; }
