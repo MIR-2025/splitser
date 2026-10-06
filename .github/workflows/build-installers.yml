@@ -24,10 +24,22 @@ jobs:
             artifact: windows
           # Split the two Mac arches into separate jobs so each builds ONE dmg on its own runner --
           # building both in one job races two dmg volumes and flakes on `hdiutil detach ... busy`.
-          - os: macos-latest
+          # PINNED FOR AN EXPERIMENT, not a fix. macOS signing has failed on every release
+          # since 0.1.37 with `security: SecKeychainUnlock: ... not correct`, while the .p12
+          # demonstrably holds a private key and the cert is valid to 2031. The only
+          # environmental change found was the runner moving Darwin 25.5.0 (last good build,
+          # v0.1.36) to 25.6.0 -- a patch bump inside the same macos-26 image, which GitHub
+          # updates in place, so 25.5.0 is not reachable again. macos-15 is a different major
+          # rather than a return to the prior state: it cannot restore the old build, it can
+          # only answer whether the OS/toolchain is the variable at all.
+          #   signs here   -> the OS is the variable; pin until electron-builder is upgraded
+          #   fails here   -> the OS is NOT the variable; electron-builder 25.1.8 (npm is on
+          #                   26.17.0) becomes the lead, since that is the component running
+          #                   /usr/bin/security in app-builder-lib's macPackager.signApp
+          - os: macos-15
             targets: --mac dmg --arm64
             artifact: macos-arm64
-          - os: macos-latest
+          - os: macos-15
             targets: --mac dmg --x64
             artifact: macos-x64
     runs-on: ${{ matrix.os }}
