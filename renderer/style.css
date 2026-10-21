@@ -31,34 +31,41 @@ body{
   background:var(--chrome); border-bottom:1px solid var(--line); }        /* named workspace pills, wrapped across rows */
 .setbar-logo{ flex:0 0 auto; width:20px; height:20px; display:block; margin-right:4px; cursor:pointer; border-radius:5px; }   /* Splitser mark (click = 1+2 layout) */
 .setbar-logo:hover{ box-shadow:0 0 0 2px var(--accent); }
-.setpill{ display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 3px 0 8px;
-  border-radius:6px; border:1px solid var(--line); background:var(--field); color:var(--muted); cursor:pointer; font-size:12px; }
+/* --ws-font sizes this whole bar (Settings -> Workspace tabs). Everything in a pill is derived
+   from it -- icon, badge, buttons, the name's max-width -- so one number rescales the bar
+   coherently instead of leaving 12px furniture around 18px text. min-height, not height: at the
+   12px default it still measures 24px exactly, and only grows once the text needs the room. */
+.setpill{ display:inline-flex; align-items:center; gap:5px; min-height:24px; padding:3px 3px 3px 8px;
+  border-radius:6px; border:1px solid var(--line); background:var(--field); color:var(--muted); cursor:pointer;
+  font-size:var(--ws-font,12px); line-height:1.25; }
 .setpill:hover{ color:var(--text); border-color:var(--line-2); }
 .setpill.on{ background:var(--field-focus); color:var(--text); border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
 .setpill.unseen{ border-color:var(--accent); }   /* pages changed in this workspace while you were elsewhere */
 .setpill.dragging{ opacity:.55; outline:2px dashed var(--accent); outline-offset:1px; cursor:grabbing; }   /* being reordered */
-.set-badge{ flex:0 0 auto; min-width:16px; height:16px; padding:0 4px; border-radius:8px; background:var(--accent); color:#05130a;
-  font-size:10px; font-weight:700; line-height:16px; text-align:center; font-variant-numeric:tabular-nums; box-shadow:0 0 0 2px var(--field); }
-.setname{ max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#fff; }
-.setname-edit{ height:18px; width:110px; background:var(--field); color:var(--text); border:1px solid var(--accent);
-  border-radius:4px; padding:0 5px; font-size:12px; outline:none; }
-.setedit, .setclose{ display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px;
-  border:0; background:transparent; color:var(--muted); border-radius:3px; font-size:11px; line-height:1; cursor:pointer; opacity:.55; }
+.set-badge{ flex:0 0 auto; min-width:calc(var(--ws-font,12px) + 4px); height:calc(var(--ws-font,12px) + 4px); padding:0 4px;
+  border-radius:999px; background:var(--accent); color:#05130a; font-size:calc(var(--ws-font,12px) - 2px); font-weight:700;
+  line-height:calc(var(--ws-font,12px) + 4px); text-align:center; font-variant-numeric:tabular-nums; box-shadow:0 0 0 2px var(--field); }
+.setname{ max-width:calc(var(--ws-font,12px) * 12.5); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:#fff; }
+.setname-edit{ width:calc(var(--ws-font,12px) * 9); background:var(--field); color:var(--text); border:1px solid var(--accent);
+  border-radius:4px; padding:1px 5px; font-size:var(--ws-font,12px); font-family:inherit; outline:none; }
+.setedit, .setclose{ display:inline-flex; align-items:center; justify-content:center;
+  width:calc(var(--ws-font,12px) + 4px); height:calc(var(--ws-font,12px) + 4px);
+  border:0; background:transparent; color:var(--muted); border-radius:3px;
+  font-size:calc(var(--ws-font,12px) - 1px); line-height:1; cursor:pointer; opacity:.55; }
 .setedit{ opacity:.8; }                              /* rename pencil -- keep it visible (double-click a pill also renames) */
 .setpill.on .setedit{ color:var(--accent); opacity:1; }
 .setedit:hover, .setclose:hover{ opacity:1; background:var(--line-2); color:var(--text); }
-.setadd{ flex:0 0 auto; height:24px; padding:0 10px; border:1px dashed var(--line-2); border-radius:6px;
-  background:transparent; color:var(--muted); cursor:pointer; font-size:12px; }
+.setadd{ flex:0 0 auto; min-height:24px; padding:3px 10px; border:1px dashed var(--line-2); border-radius:6px;
+  background:transparent; color:var(--muted); cursor:pointer; font-size:var(--ws-font,12px); }
 .setadd:hover{ background:var(--field); color:var(--text); border-color:var(--accent); }
-.setinc{ flex:0 0 auto; height:24px; padding:0 8px; border:1px solid var(--line-2); border-radius:6px;   /* new private workspace */
-  background:transparent; color:var(--muted); cursor:pointer; font-size:13px; line-height:1; }
+.setinc{ flex:0 0 auto; min-height:24px; padding:3px 8px; border:1px solid var(--line-2); border-radius:6px;   /* new private workspace */
+  background:transparent; color:var(--muted); cursor:pointer; font-size:calc(var(--ws-font,12px) + 1px); line-height:1; }
 .setinc:hover{ background:color-mix(in srgb, #6b4ea6 22%, var(--field)); color:var(--text); border-color:#8a6fd0; }
-.setfav{ width:14px; height:14px; flex:0 0 auto; border-radius:3px; }
-.setfav-none{ font-size:13px; opacity:.7; line-height:1; }
-.setinc-ico{ font-size:13px; line-height:1; }
+.setfav{ width:calc(var(--ws-font,12px) + 2px); height:calc(var(--ws-font,12px) + 2px); flex:0 0 auto; border-radius:3px; }
+.setfav-none{ font-size:calc(var(--ws-font,12px) + 1px); opacity:.7; line-height:1; }
+.setinc-ico{ font-size:calc(var(--ws-font,12px) + 1px); line-height:1; }
 .setpill.incognito{ background:color-mix(in srgb, #6b4ea6 24%, var(--field)); border-color:#6b4ea6; }   /* private = purple */
 .setpill.incognito.on{ background:color-mix(in srgb, #6b4ea6 42%, var(--field-focus)); border-color:#9a7fe0; box-shadow:0 0 0 1px #9a7fe0 inset; }
-
 /* ---- per-pane tabs ---- */
 .tabstrip{
   flex:0 0 auto; display:flex; align-items:stretch; gap:2px; height:28px;
@@ -377,6 +384,12 @@ webview{ display:flex }
 .settings select{ font-family:inherit; cursor:pointer; }
 .settings input:focus, .settings select:focus{border-color:var(--accent)}
 .set-row{display:flex; flex-wrap:wrap; gap:8px; margin-top:4px}
+/* a range must opt OUT of the text-input styling above, or the generic `.settings input`
+   rule gives it a 30px box, a field background and 10px of padding */
+.settings input[type=range]{ height:auto; background:none; border:0; border-radius:0; padding:0;
+  flex:1 1 auto; accent-color:var(--accent); }
+.set-inline{display:flex; align-items:center; gap:9px}
+.set-val{flex:0 0 34px; font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums}
 .danger{
   background:transparent; color:#e0857f; border:1px solid var(--line-2); border-radius:7px;
   padding:6px 10px; font-size:12px; cursor:pointer;

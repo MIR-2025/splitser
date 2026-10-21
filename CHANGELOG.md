@@ -1,10 +1,35 @@
 # Changelog
 
 All notable changes to Splitser. Each version is a tagged CI release; installers
-(`.deb` / `.rpm` / `.AppImage` / `.exe` / `.dmg`) are built per tag and are currently
-**unsigned** (expect a SmartScreen / Gatekeeper prompt). Which builds have actually been run on
+(`.deb` / `.rpm` / `.AppImage` / `.exe` / `.dmg`) are built per tag. The macOS `.dmg` is signed
+and notarized from **0.1.43** on; the Windows `.exe` and the Linux packages are still **unsigned**
+(expect a SmartScreen prompt on Windows). Which builds have actually been run on
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
+
+## 0.1.43 — 2026-10-21
+### Added
+- **A text size for the Workspaces bar.** Settings → Workspace tabs is a slider from 10px to
+  22px. The whole bar scales from it -- favicon, unseen badge, rename pencil, close ×, the
+  name's maximum width and the **+ Workspace** button -- so making the text bigger grows the
+  bar coherently instead of leaving small furniture around large labels. It resizes while you
+  drag the slider, and the 12px default looks exactly as it did before.
+
+### Fixed
+- **macOS builds are signed and notarized again, for the first time since 0.1.36.** Every tag
+  from 0.1.37 onward failed both Mac legs inside electron-builder's keychain handling, with an
+  error that pointed at the certificate (`SecKeychainUnlock: the user name or passphrase you
+  entered is not correct`) while the certificate was fine the whole time. The build toolchain
+  is now electron-builder 26, which signs and notarizes on the current runner without any other
+  change. Expect the Gatekeeper prompt to be gone on the `.dmg`; the Windows `.exe` is still
+  unsigned.
+- **The `.AppImage` starts on distributions that restrict unprivileged user namespaces.** The
+  0.1.37 AppImage aborted immediately with `chrome-sandbox ... is not configured correctly`: an
+  AppImage is mounted `nosuid`, so it cannot use the SUID sandbox helper, and Ubuntu 24.04 blocks
+  the namespace sandbox as well, leaving it no sandbox to start with. The new launcher detects
+  that case and starts the app with `--no-sandbox`. Read that as a trade rather than a fix -- it
+  runs, with the renderer sandbox **off**. The `.deb` and `.rpm` are unaffected and stay
+  sandboxed, so on Linux prefer a package over the AppImage.
 
 ## 0.1.42 — 2026-10-05
 ### Added

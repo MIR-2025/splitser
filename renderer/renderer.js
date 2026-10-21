@@ -1204,6 +1204,17 @@ function setName(s, i) {   // a workspace's label: user-set name, else its first
 // the real Splitser logo (bundled renderer/logo.svg -- same mark as the app icon), top-left of the
 // Workspaces bar; clicking it still applies the 1+2 layout.
 const LOGO_SVG = '<img class="setbar-logo" src="logo.svg" width="20" height="20" alt="Splitser" title="Splitser -- click for the 1+2 layout" />';
+// ---- Workspaces-bar text size (Settings -> Workspace tabs) ---------------------------------
+// One CSS variable the whole bar derives from -- icon, badge, pencil, x, the name's max-width --
+// so raising it rescales the bar coherently instead of leaving 12px furniture around 18px text.
+const WS_FONT_DEFAULT = 12, WS_FONT_MIN = 10, WS_FONT_MAX = 22;
+const wsFont = () => Math.min(WS_FONT_MAX, Math.max(WS_FONT_MIN, +SETTINGS.wsFont || WS_FONT_DEFAULT));
+function applyWsChrome() {
+  document.documentElement.style.setProperty('--ws-font', wsFont() + 'px');
+  renderSetbar();
+  Theme.remeasure();                         // the banner strip is measured from the bar's height
+}
+
 function renderSetbar() {   // the "Workspaces" bar: named pills that wrap across rows (like the Split Screen ext)
   const pills = sets.map((s, i) => {
     const fav = s.panes.map((p) => p.activeTab && p.activeTab.favicon).find(Boolean);
@@ -1849,10 +1860,20 @@ async function fillSettings() {
   document.getElementById('set-home').value = SETTINGS.home;
   document.getElementById('set-search').value = SETTINGS.search;
   document.getElementById('set-dlmode').value = SETTINGS.downloadMode || 'auto';
+  document.getElementById('set-wsfont').value = wsFont();
+  document.getElementById('set-wsfont-val').textContent = wsFont() + 'px';
 }
 document.getElementById('set-home').addEventListener('change', async (e) => { SETTINGS = await api.settingsSet({ home: e.target.value.trim() }); });
 document.getElementById('set-search').addEventListener('change', async (e) => { SETTINGS = await api.settingsSet({ search: e.target.value.trim() }); });
 document.getElementById('set-dlmode').addEventListener('change', async (e) => { SETTINGS = await api.settingsSet({ downloadMode: e.target.value }); });
+// 'input' not 'change', so dragging the slider resizes the bar live. Repaint from the local value
+// first and persist after: awaiting the write before redrawing makes the drag feel sticky.
+document.getElementById('set-wsfont').addEventListener('input', async (e) => {
+  const px = +e.target.value;
+  document.getElementById('set-wsfont-val').textContent = px + 'px';
+  SETTINGS = { ...SETTINGS, wsFont: px }; applyWsChrome();
+  SETTINGS = await api.settingsSet({ wsFont: px });
+});
 panelSet.querySelectorAll('.danger').forEach((b) => b.addEventListener('click', async () => {
   await api.clearData(b.dataset.clear);
   if (b.dataset.clear === 'bookmarks') { renderBookmarks(); panes.forEach((p) => p.refreshStar()); }
@@ -1894,6 +1915,7 @@ if (saved && saved.v === 2 && Array.isArray(saved.sets) && saved.sets.length) {
 Vault.init({ api, getPanes: () => panes, getActive: () => active() });
 Theme.init();
 Theme.onChange((t) => { if (cur) { cur.theme = t; saveSession(); } });   // a theme edit belongs to the current set
+applyWsChrome();   // Workspaces-bar text size, from settings. After Theme.init so the banner remeasures.
 updateGridBtn();
 if (api.appReady) api.appReady();   // restore + vault + theme are up -> main may now open a URL Splitser was launched with
 
