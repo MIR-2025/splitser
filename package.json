@@ -69,7 +69,7 @@
   },
   "devDependencies": {
     "electron": "^43.4.0",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^26.17.0"
   },
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.18.2"
