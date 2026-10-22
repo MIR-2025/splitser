@@ -625,12 +625,50 @@ app.whenReady().then(() => {
   wireSession(electronSession.fromPartition('persist:split'));
   wireSession(electronSession.fromPartition('split-incognito'));   // in-memory session for private workspaces
 
-  // a page opening a popup / target=_blank -> a new PANE; shortcuts on every webview
+  // a LINK opening elsewhere -> a new PANE; a real window.open() -> a real window; shortcuts on every webview
   app.on('web-contents-created', (_e, contents) => {
     if (contents.getType() !== 'webview') return;
-    contents.setWindowOpenHandler(({ url }) => {
-      if (win && /^(https?:|about:)/.test(url)) win.webContents.send('open-pane', url);
-      return { action: 'deny' };
+    contents.setWindowOpenHandler(({ url, frameName, features, disposition }) => {
+      if (!/^(https?:|about:)/.test(url)) return { action: 'deny' };
+      // A pane is the right home for a LINK -- target=_blank, middle-click, "open in new tab".
+      // It is the WRONG home for a real window.open(), because a pane is a detached top-level
+      // webview: denying the popup makes window.open() return null and leaves the new pane's
+      // window.opener null. Every flow that hands its result BACK through the opener then hangs
+      // forever -- OAuth and passkey ceremonies postMessage the assertion to window.opener and
+      // poll popup.closed to notice a cancel. Measured 2026-10-22 against 0.1.43: window.open()
+      // returned null, reading popup.closed threw TypeError, the popup's own postMessage threw
+      // TypeError on a null opener, and the opener received zero messages.
+      // So: keep panes for links, and give a genuine popup a genuine window, opener intact.
+      const named = Boolean(frameName) && frameName !== '_blank';
+      const wantsOpener = disposition === 'new-window' || named || String(features || '').trim() !== '';
+      if (!wantsOpener) {
+        if (win) win.webContents.send('open-pane', url);
+        return { action: 'deny' };
+      }
+      // Honour the size the opener asked for, clamped so a page cannot open a 1px or a screen-filling
+      // window. Auth popups are tall and narrow; these defaults match what providers typically request.
+      const feat = (k) => {
+        const m = new RegExp('(?:^|,)\\s*' + k + '\\s*=\\s*(\\d+)').exec(String(features || ''));
+        return m ? Number(m[1]) : 0;
+      };
+      const clamp = (v, lo, hi, dflt) => (v >= lo ? Math.min(v, hi) : dflt);
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          width: clamp(feat('width'), 240, 1600, 480),
+          height: clamp(feat('height'), 240, 1200, 640),
+          title: 'Splitser', backgroundColor: '#0e1418', autoHideMenuBar: true,
+          // No preload and no Node: a popup is still someone else's page. It shares the opener's
+          // SESSION on purpose -- the handshake needs the same cookies -- which also means the
+          // ad/tracker blocking, default-deny permission handlers and cert observer wired in
+          // wireSession() all still apply to it, since those are registered per session.
+          webPreferences: {
+            session: contents.session,
+            nodeIntegration: false, nodeIntegrationInSubFrames: false,
+            contextIsolation: true, sandbox: true, webSecurity: true
+          }
+        }
+      };
     });
     contents.on('did-start-navigation', (_ev, url, isInPlace, isMainFrame) => {   // new page -> reset its block count
       if (isMainFrame && !isInPlace) {
