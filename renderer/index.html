@@ -112,6 +112,12 @@
     </div>
   </div>
 
+  <!-- Classic script, loaded before the module on purpose: it defines
+       window.WHITNEYS_EMOJI for the workspace glyph picker. It cannot be JSON
+       because this frame is a file:// origin, where fetch and XHR are blocked
+       and module imports are fetched with CORS against an opaque origin.
+       Generated -- see scripts/build-emoji-manifest.py. -->
+  <script src="fonts/emoji-manifest.js"></script>
   <script type="module" src="renderer.js"></script>
 </body>
 </html>

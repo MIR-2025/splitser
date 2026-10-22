@@ -710,3 +710,111 @@ body:has(.drag-shield) .view{ pointer-events:none; }
 .hc-mem.hot{ color:#ffb27a; }
 .hc-mem.blazing{ color:#ff8a6b; font-weight:600; }
 .hc-audio{ margin-left:auto; color:var(--accent); }
+
+/* ── Whitneys Emoji ────────────────────────────────────────────────────────
+   Shortcode emoji for workspace names: type :STAR-MINT: into a workspace name
+   and the font's ligature turns it into colour artwork. 1,672 shortcodes: 26
+   faces, 18 shapes and 36 letters/digits in 3 tile styles, all in 11 colours.
+   A shape's DEFAULT colour has no suffix, so :smile: is the sun face,
+   :heart: the rose heart and :circle-r: the yellow tile; every non-default
+   carries one, as in :key-w-sky: or :circle-a-rose:. The font is unicase, so
+   :smile: and :SMILE: both work.
+
+   Built by the emoji.whitneys.co project with nanoemoji. The copy here is
+   WhitneysEmoji-COLR.woff2, sha256 4410a92702...b0bf59f0, 40,780 bytes.
+   Colour is nearly free in this format: 1,672 emoji share just 256 outlines,
+   each colour costing a palette entry and paint records rather than new art.
+
+   THE -colr SUFFIX IS LOAD-BEARING -- do not replace this with the site's
+   WhitneysEmoji.woff2. That one is 94,428 bytes because it also carries an
+   SVG-in-OpenType table, which is Safari's only colour path: Safari has never
+   supported COLRv1 in any released version and WebKit declined to add it.
+   Splitser is Electron, so Chromium ignores that table entirely and renders
+   from COLR -- here it is 43 KB of dead weight, on the site it is essential.
+   Verified table-by-table: COLR, CPAL, GSUB, glyf, hmtx, cmap and glyph order
+   are byte-identical between the two, so this cut loses nothing but bytes.
+
+   COLRv1, so the colour needs Chromium 98+. This build is on 150.
+
+   SCOPED TO .wemoji DELIBERATELY -- do not move this to .setname, .tabtitle or
+   body. The font maps printable ASCII only (U+0020..U+007E) and its lowercase
+   codepoints point at UPPERCASE glyphs, so anything that inherits it renders
+   in all caps. It is an emoji font wearing a text font's cmap, and it belongs
+   on the shortcode run alone, never on a whole label.
+
+   No CSP change was needed: the frame sets default-src 'self' with no font-src,
+   and this file is same-origin. Do not relax that CSP -- see index.html. */
+@font-face {
+  font-family: 'Whitneys Emoji';
+  src: url('fonts/WhitneysEmoji-colr.woff2') format('woff2');
+  font-display: block;   /* show nothing briefly rather than flash the raw :SHORTCODE: */
+}
+.wemoji {
+  font-family: 'Whitneys Emoji';
+  font-feature-settings: 'liga' 1, 'calt' 1;   /* the ligature IS the mechanism */
+  font-variant-ligatures: common-ligatures;
+  line-height: 1;
+  vertical-align: -0.12em;   /* sit on the baseline rather than ride above it */
+  white-space: nowrap;       /* never wrap mid-shortcode and break the ligature */
+  /* Slightly larger than the text it sits in, which is how emoji normally set.
+     A workspace pill is var(--ws-font, 12px), where a 1em glyph boxes at 15px --
+     fine for a face, a heart or an arrow, which are silhouettes. A LETTER tile is
+     different: the character inside it needs roughly 24px before it reads, and at
+     12px it is just a coloured dot. 1.25em takes the box to 19px, which helps
+     every emoji and still fits the 24px pill without growing the bar. If you want
+     letter tiles actually readable, raise --ws-font in Settings -> Workspace tabs
+     rather than inflating this, or the faces end up cartoonish next to the text. */
+  font-size: 1.25em;
+}
+
+/* ── Glyph picker ──────────────────────────────────────────────────────────
+   Opens under a workspace pill while it is in rename mode, so an emoji can be
+   clicked into the name instead of typed from memory. 1,672 shortcodes is far
+   too many for a flat grid, so it is shown as 152 BASES with a colour selector
+   above: pick the colour once, then pick the shape. Every base exists in all 11
+   colours, so the grid never changes size when the colour changes.
+
+   NOTHING IN HERE MAY TAKE FOCUS. The rename input commits on blur, so a picker
+   that stole focus would save the name and tear itself down on first click.
+   Every mousedown in the panel is preventDefault()ed and the input keeps focus
+   throughout -- which is also why filtering is driven by what you type in the
+   NAME field rather than by a search box in here, since a search box would need
+   focus to work. */
+.glyphpick{
+  position:fixed; z-index:400; width:min(420px, calc(100vw - 24px));
+  background:var(--surface); border:1px solid var(--line-2); border-radius:10px;
+  box-shadow:0 12px 32px rgba(0,0,0,.5); overflow:hidden;
+  font-size:12px; color:var(--text);
+}
+.gp-colours{
+  display:flex; gap:4px; padding:8px; flex-wrap:wrap;
+  border-bottom:1px solid var(--line); background:var(--surface-2);
+}
+.gp-colour{
+  display:flex; align-items:center; justify-content:center;
+  width:26px; height:26px; border-radius:50%; border:2px solid transparent;
+  cursor:pointer; padding:0; background:transparent;
+}
+/* The swatch IS the font: each chip renders :circle-<colour>:, so the palette
+   can never disagree with the glyphs below it and no hex table has to be kept
+   in sync with the font's CPAL. */
+.gp-colour .wemoji{ font-size:18px; vertical-align:0; }
+.gp-colour.on{ border-color:var(--accent); }
+.gp-body{ max-height:280px; overflow-y:auto; overscroll-behavior:contain; padding:4px 8px 8px; }
+.gp-h{
+  position:sticky; top:0; background:var(--surface); padding:7px 2px 4px;
+  color:var(--muted); font-size:10.5px; letter-spacing:.07em; text-transform:uppercase;
+}
+.gp-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(34px, 1fr)); gap:2px; }
+.gp-cell{
+  display:flex; align-items:center; justify-content:center; height:34px;
+  border:0; background:transparent; border-radius:6px; cursor:pointer; padding:0;
+}
+.gp-cell:hover{ background:var(--line-2); }
+.gp-cell .wemoji{ font-size:22px; vertical-align:0; }   /* big enough to tell apart -- see the .wemoji note */
+.gp-empty{ padding:14px 2px; color:var(--muted); }
+.gp-foot{
+  padding:6px 8px; border-top:1px solid var(--line); background:var(--surface-2);
+  color:var(--muted); font-size:11px; display:flex; justify-content:space-between; gap:8px;
+}
+.gp-foot b{ color:var(--text); font-weight:600; }

@@ -693,6 +693,50 @@ function hideSuggest(pane) { const b = pane.el.querySelector('.suggest'); b.hidd
 // unsafe one always ends up with the shorter name and gets reached for by habit -- security review #1).
 function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
+// Workspace-name shortcodes: ":ARROW-RIGHT-TANGERINE:" renders as one colour glyph, via the
+// Whitneys Emoji ligature set (see the @font-face note in style.css).
+//
+// Applied to a USER-SET name only. A workspace with no name falls back to its first site's
+// host, and this is the privileged frame -- a page that could paint a padlock or a verified
+// tick into the workspace bar is a spoofing surface, so derived names stay plain text. Tab
+// titles are left alone entirely for the same reason: a page controls its own title.
+//
+// Safe by construction: a token is [A-Z0-9][A-Z0-9_-]* between colons, which cannot contain
+// an HTML metacharacter, and every run around it still goes through esc().
+// Case-insensitive because the font is unicase and the picker emits lowercase.
+// This regex was UPPERCASE-ONLY at first and matched nothing, so names kept their
+// raw ":heart:" text -- caught by rendering a committed pill, not by reading code.
+const WEMOJI_RE = /:([a-z0-9][a-z0-9_-]*):/gi;
+
+// Only wrap codes the font can actually draw. Built once from the manifest, so a
+// name like "12:30:45" stays text instead of being wrapped and rendered in the
+// font's all-caps lettering, and a typo'd code stays readable rather than turning
+// into mush. Empty set (no manifest) means nothing is wrapped, which is the right
+// failure: names render exactly as they did before any of this existed.
+let WEMOJI_SET = null;
+function wemojiCodes() {
+  if (WEMOJI_SET) return WEMOJI_SET;
+  const d = window.WHITNEYS_EMOJI;
+  WEMOJI_SET = new Set();
+  if (d && Array.isArray(d.bases)) {
+    d.bases.forEach((b) => d.colours.forEach((c) => WEMOJI_SET.add(gpCode(b, c))));
+  }
+  return WEMOJI_SET;
+}
+
+function emojiLabel(raw) {
+  const known = wemojiCodes();
+  let out = '', last = 0, m;
+  WEMOJI_RE.lastIndex = 0;
+  while ((m = WEMOJI_RE.exec(raw)) !== null) {
+    const code = m[0].toLowerCase();
+    if (!known.has(code)) continue;          // not a real glyph -- leave it as text
+    out += esc(raw.slice(last, m.index)) + '<span class="wemoji">' + code + '</span>';
+    last = m.index + m[0].length;
+  }
+  return out + esc(raw.slice(last));
+}
+
 // Dedicated streaming services whose video is DRM-only (Widevine / PlayReady), which vanilla Electron
 // can't decrypt. Flagged by host so a pane can explain why the video is blank (see pane.showDrmNote).
 const DRM_HOSTS = ['netflix.com', 'disneyplus.com', 'hulu.com', 'max.com', 'hbomax.com', 'primevideo.com', 'spotify.com', 'peacocktv.com', 'paramountplus.com', 'crunchyroll.com', 'tv.apple.com', 'music.apple.com', 'hotstar.com', 'starz.com', 'sling.com', 'fubo.tv'];
@@ -1223,7 +1267,7 @@ function renderSetbar() {   // the "Workspaces" bar: named pills that wrap acros
     return '<span class="setpill' + (s === cur ? ' on' : '') + (s.incognito ? ' incognito' : '') + (n ? ' unseen' : '') + '" data-i="' + i + '" title="' + esc(name).replace(/"/g, '&quot;') + (s.incognito ? ' (private -- nothing saved)' : '') + (n ? ' -- ' + n + ' change' + (n === 1 ? '' : 's') + ' here' : '') + '">' +
       (s.incognito ? '<span class="setinc-ico">&#128374;</span>' : (fav ? '<img class="setfav" src="' + fav.replace(/"/g, '&quot;') + '" alt="" />' : '<span class="setfav-none">&#127760;</span>')) +
       (n ? '<span class="set-badge">' + (n > 99 ? '99+' : n) + '</span>' : '') +
-      '<span class="setname">' + esc(name) + '</span>' +
+      '<span class="setname">' + (s.name ? emojiLabel(s.name) : esc(name)) + '</span>' +
       '<button class="setedit" data-i="' + i + '" title="Rename workspace">&#9998;</button>' +
       (sets.length > 1 ? '<button class="setclose" data-i="' + i + '" title="Close workspace">&#215;</button>' : '') +
       '</span>';
@@ -1232,16 +1276,174 @@ function renderSetbar() {   // the "Workspaces" bar: named pills that wrap acros
     '<button class="setadd" title="New workspace (Ctrl+T)">+ Workspace</button>' +
     '<button class="setinc" title="New private workspace -- ephemeral, nothing saved (Ctrl+Shift+N)">&#128374;</button>';
 }
+// ── Glyph picker ──────────────────────────────────────────────────────────
+// A grid of Whitneys Emoji shown under a workspace pill while it is being
+// renamed, so a glyph can be clicked in rather than typed from memory.
+//
+// 1,672 shortcodes will not fit in a usable grid, so it is shown as 152 BASES
+// with the colour chosen once, above. Every base exists in all 11 colours, so
+// the grid never reflows when the colour changes.
+//
+// NOTHING HERE MAY TAKE FOCUS. The rename input commits on blur, so a picker
+// that stole focus would save the name and tear itself down on the first click.
+// One mousedown guard on the panel covers every control inside it. That is also
+// why there is no search box: filtering is driven by the partial ":ar" you type
+// in the NAME field, which needs no focus of its own.
+//
+// The manifest is window.WHITNEYS_EMOJI, loaded by index.html before this
+// module. If it is missing the picker simply never opens and renaming still
+// works exactly as it did before.
+const GP = { el: null, input: null, colour: null };
+
+function gpCode(b, colour) {
+  return colour === b.d ? ':' + b.n + ':' : ':' + b.n + '-' + colour + ':';
+}
+
+function closeGlyphPicker() {
+  if (GP.el) { GP.el.remove(); GP.el = null; }
+  GP.input = null;
+}
+
+// What the user is part-way through typing, e.g. ":arr" -> "arr". Drives the
+// filter without a focusable search field, and tells gpInsert how much to replace.
+//
+// Complete codes are stripped BEFORE looking for a trailing partial, because the
+// CLOSING colon of ":grin:" is otherwise indistinguishable from someone having
+// just typed ":" to start a new one. Without that strip, clicking a glyph after
+// an existing code swallowed its terminator and produced ":grin:smile:" instead
+// of ":grin::smile:" -- found by clicking, not by reading the regex.
+function gpPartialAt(value, caret) {
+  const upto = value.slice(0, caret);
+  const m = /:([a-z0-9-]*)$/i.exec(upto.replace(/:[a-z0-9-]+:/gi, ''));
+  return m ? { text: m[1].toLowerCase(), len: m[0].length } : null;
+}
+
+function gpPartial() {
+  const i = GP.input; if (!i) return '';
+  const p = gpPartialAt(i.value, i.selectionStart == null ? i.value.length : i.selectionStart);
+  return p ? p.text : '';
+}
+
+function gpInsert(code) {
+  const i = GP.input; if (!i) return;
+  const start = i.selectionStart == null ? i.value.length : i.selectionStart;
+  const end = i.selectionEnd == null ? start : i.selectionEnd;
+  // Swallow the partial the filter was built from, so clicking a result replaces
+  // ":arr" rather than leaving the fragment sitting in front of the glyph.
+  const p = gpPartialAt(i.value, start);
+  const from = p ? start - p.len : start;
+  i.value = i.value.slice(0, from) + code + i.value.slice(end);
+  const caret = from + code.length;
+  i.focus(); i.setSelectionRange(caret, caret);
+  gpRender();
+}
+
+function gpRender() {
+  const data = window.WHITNEYS_EMOJI, el = GP.el;
+  if (!data || !el) return;
+  const q = gpPartial();
+  const circle = data.bases.find((b) => b.n === 'circle') || data.bases[0];
+  el.textContent = '';
+
+  const row = document.createElement('div'); row.className = 'gp-colours';
+  data.colours.forEach((c) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.title = c;
+    b.className = 'gp-colour' + (c === GP.colour ? ' on' : '');
+    const g = document.createElement('span');
+    g.className = 'wemoji'; g.textContent = gpCode(circle, c);
+    b.appendChild(g);
+    b.addEventListener('click', () => { GP.colour = c; gpRender(); });
+    row.appendChild(b);
+  });
+  el.appendChild(row);
+
+  const body = document.createElement('div'); body.className = 'gp-body';
+  let shown = 0;
+
+  // Browsing shows the manifest's groups in its own order. SEARCHING collapses to
+  // one ranked list instead: with a filter on, what matters is the best match
+  // being first, not which heading it lives under. Substring, so ":art" still
+  // finds "heart", but prefix matches lead -- typing ":ar" wants the arrows, not
+  // sparkle, party and square, which all contain "ar" in the middle.
+  const sections = q
+    ? [{ label: 'Matches', rows: (() => {
+        const hit = data.bases.filter((b) => b.n.indexOf(q) !== -1);
+        return hit.filter((b) => b.n.startsWith(q)).concat(hit.filter((b) => !b.n.startsWith(q)));
+      })() }]
+    : data.groups.map((g) => ({ label: g.label, rows: data.bases.filter((b) => b.g === g.id) }));
+
+  sections.forEach((grp) => {
+    const rows = grp.rows;
+    if (!rows.length) return;
+    shown += rows.length;
+    const h = document.createElement('div'); h.className = 'gp-h'; h.textContent = grp.label;
+    body.appendChild(h);
+    const grid = document.createElement('div'); grid.className = 'gp-grid';
+    rows.forEach((b) => {
+      const code = gpCode(b, GP.colour);
+      const cell = document.createElement('button');
+      cell.type = 'button'; cell.className = 'gp-cell'; cell.title = code;
+      const g = document.createElement('span');
+      g.className = 'wemoji'; g.textContent = code;
+      cell.appendChild(g);
+      cell.addEventListener('click', () => gpInsert(code));
+      grid.appendChild(cell);
+    });
+    body.appendChild(grid);
+  });
+  if (!shown) {
+    const p = document.createElement('div'); p.className = 'gp-empty';
+    p.textContent = q ? 'Nothing matches ":' + q + '"' : 'No glyphs available.';
+    body.appendChild(p);
+  }
+  el.appendChild(body);
+
+  const foot = document.createElement('div'); foot.className = 'gp-foot';
+  const left = document.createElement('span');
+  left.append(String(shown) + ' in ');
+  const bold = document.createElement('b'); bold.textContent = GP.colour;
+  left.appendChild(bold);
+  const right = document.createElement('span');
+  right.textContent = q ? 'filtering ":' + q + '"' : 'type :name to filter';
+  foot.append(left, right);
+  el.appendChild(foot);
+}
+
+function gpPlace(pill) {
+  const r = pill.getBoundingClientRect(), el = GP.el; if (!el) return;
+  el.style.left = Math.max(8, Math.min(r.left, window.innerWidth - el.offsetWidth - 8)) + 'px';
+  el.style.top = Math.max(8, Math.min(r.bottom + 6, window.innerHeight - el.offsetHeight - 8)) + 'px';
+}
+
+function openGlyphPicker(input, pill) {
+  const data = window.WHITNEYS_EMOJI;
+  if (!data || !Array.isArray(data.bases) || !data.bases.length) return;
+  closeGlyphPicker();
+  GP.input = input;
+  if (!GP.colour || data.colours.indexOf(GP.colour) === -1) GP.colour = data.colours[0];
+  const el = document.createElement('div');
+  el.className = 'glyphpick';
+  // The one line that makes the whole thing work -- see the note above.
+  el.addEventListener('mousedown', (e) => e.preventDefault());
+  document.body.appendChild(el);
+  GP.el = el;
+  gpRender();
+  gpPlace(pill);
+}
+
 function renameSet(s, pill) {
   const nameEl = pill.querySelector('.setname'); if (!nameEl) return;
   const input = document.createElement('input'); input.className = 'setname-edit';
   input.value = s.name || nameEl.textContent;
   nameEl.replaceWith(input); input.focus(); input.select();
+  openGlyphPicker(input, pill);
   let done = false;
-  const commit = (save) => { if (done) return; done = true; if (save) { s.name = input.value.trim(); saveSession(); } renderSetbar(); };
+  const commit = (save) => { if (done) return; done = true; closeGlyphPicker(); if (save) { s.name = input.value.trim(); saveSession(); } renderSetbar(); };
   input.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); commit(true); } else if (e.key === 'Escape') commit(false); });
   input.addEventListener('blur', () => commit(true));
   input.addEventListener('click', (e) => e.stopPropagation());
+  input.addEventListener('input', () => gpRender());       // re-filter as ":ar" is typed
 }
 let pillDragged = false;   // set by a reorder drag so the trailing click doesn't also switchSet
 setbar.addEventListener('click', (e) => {

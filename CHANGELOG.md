@@ -9,6 +9,24 @@ page on splitser.org tracks the per-release, per-artifact verification status.
 
 ## 0.1.43 — 2026-10-21
 ### Added
+- **Whitneys Emoji, embedded, for workspace names.** Type `:heart:` or `:arrow-right-berry:` in a
+  workspace name and it renders as a colour glyph in the pill. The font ships inside the app --
+  1,672 codes, 152 shapes in 11 colours: faces, arrows and symbols, plus a letter and digit tile
+  for every character in three styles, so a workspace can be labelled with a coloured **A** as
+  easily as with a heart. Nothing is fetched at runtime, so this works offline and the app's
+  content-security policy is unchanged.
+- **A glyph picker while you rename.** Click the pencil on a pill and a panel opens beneath it:
+  a row of colour swatches, then the glyphs in sections. Typing narrows it to one ranked list,
+  and a partial code you have already typed in the name field (`:ar`) filters as you go. It
+  never takes focus from the name field, so the rename you are in the middle of survives using
+  it, and clicking a glyph inserts its code at the cursor.
+  - Only codes the font actually carries are rendered as glyphs. A time like `12:30` and an
+    unknown `:nope:` stay as plain text rather than disappearing into a missing-glyph box.
+  - Glyphs render only in names **you** set. A name derived from the page's own title is left as
+    text on purpose: those are controlled by whatever site is loaded, and a page that could draw
+    glyphs into the app's own chrome is a spoofing surface.
+  - The letter and digit tiles are legible at the default 12px but small. The text-size slider
+    below is the remedy -- at 18px they read cleanly.
 - **A text size for the Workspaces bar.** Settings → Workspace tabs is a slider from 10px to
   22px. The whole bar scales from it -- favicon, unseen badge, rename pencil, close ×, the
   name's maximum width and the **+ Workspace** button -- so making the text bigger grows the
