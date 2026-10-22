@@ -2,8 +2,8 @@
 
 All notable changes to Splitser. Each version is a tagged CI release; installers
 (`.deb` / `.rpm` / `.AppImage` / `.exe` / `.dmg`) are built per tag. The macOS `.dmg` is signed
-and notarized from **0.1.43** on; the Windows `.exe` and the Linux packages are still **unsigned**
-(expect a SmartScreen prompt on Windows). Which builds have actually been run on
+with a Developer ID and notarized by Apple; the Windows `.exe` and the Linux packages are still
+**unsigned** (expect a SmartScreen prompt on Windows). Which builds have actually been run on
 real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
 page on splitser.org tracks the per-release, per-artifact verification status.
 
@@ -34,13 +34,17 @@ page on splitser.org tracks the per-release, per-artifact verification status.
   drag the slider, and the 12px default looks exactly as it did before.
 
 ### Fixed
-- **macOS builds are signed and notarized again, for the first time since 0.1.36.** Every tag
-  from 0.1.37 onward failed both Mac legs inside electron-builder's keychain handling, with an
-  error that pointed at the certificate (`SecKeychainUnlock: the user name or passphrase you
+- **A tagged release produces macOS disk images again, for the first time since 0.1.36.** Every
+  tag from 0.1.37 to 0.1.42 failed both Mac legs inside electron-builder's keychain handling, with
+  an error that pointed at the certificate (`SecKeychainUnlock: the user name or passphrase you
   entered is not correct`) while the certificate was fine the whole time. The build toolchain
   is now electron-builder 26, which signs and notarizes on the current runner without any other
-  change. Expect the Gatekeeper prompt to be gone on the `.dmg`; the Windows `.exe` is still
-  unsigned.
+  change. The Windows `.exe` is still unsigned.
+
+  To be precise about what was broken, since the download page has been offering signed disk
+  images throughout: the **tag** produced no `.dmg` at all for six releases. The 0.1.42 images on
+  splitser.org were built from a branch carrying this same fix and published by hand, so they are
+  signed and notarized like any other. 0.1.43 is the first tag to build them unaided.
 - **The `.AppImage` starts on distributions that restrict unprivileged user namespaces.** The
   0.1.37 AppImage aborted immediately with `chrome-sandbox ... is not configured correctly`: an
   AppImage is mounted `nosuid`, so it cannot use the SUID sandbox helper, and Ubuntu 24.04 blocks
@@ -226,24 +230,31 @@ page on splitser.org tracks the per-release, per-artifact verification status.
 
 ## 0.1.25 — 2026-08-19
 ### Fixed
-- **RPM post-remove scriptlet no longer fails the transaction.** The package registers its launcher
+- **RPM post-remove scriptlet no longer errors on upgrade.** The package registers its launcher
   through `update-alternatives`, but shipped electron-builder's default post-remove, which tried to remove
   a different alternative path than the one installed -- so on upgrade it errored (`/usr/bin/splitser has
-  not been configured as an alternative for splitser`) and, on Fedora's dnf5, failed the whole transaction.
-  A custom post-remove now removes the exact alternative that was installed, only on a real uninstall (not
-  an upgrade, where the new package owns it), and never exits non-zero.
+  not been configured as an alternative for splitser`) and dnf5 ended the run with `Transaction failed: Rpm
+  transaction failed.` A custom post-remove now removes the exact alternative that was installed, only on a
+  real uninstall (not an upgrade, where the new package owns it), and never exits non-zero.
+
+  **The upgrade itself completed.** dnf5's own label on that line is `Non-critical error`, and the scriptlet
+  runs after the transaction is already committed: the install and removal steps both report 100%, and RPM
+  does not roll back. It also errored *because* the path it tried to remove had never been registered, so it
+  removed nothing -- the launcher the incoming package had just installed was left alone. Alarming output,
+  nothing damaged.
 
   **This takes effect from the _next_ upgrade, not this one.** On any upgrade it's the *outgoing* package's
-  post-remove that runs -- so anyone already on 0.1.21–0.1.24 still hits the old broken scriptlet once when
-  upgrading to 0.1.25. 0.1.25 is the last version that *triggers* the error, the first that no longer *ships*
-  it. It's **RPM-only**: Debian's `update-alternatives` ignores an unregistered path and exits 0, so `.deb`
-  upgrades were never affected. One-time recovery on Fedora -- clear the old package without running its
-  scriptlet, then install fresh:
+  post-remove that runs -- so anyone already on 0.1.21-0.1.24 still sees the error once when upgrading to
+  0.1.25. 0.1.25 is the last version that *triggers* it, the first that no longer *ships* it. It's
+  **RPM-only**: Debian's `update-alternatives` ignores an unregistered path and exits 0, so `.deb` upgrades
+  were never affected.
 
-  ```
-  sudo rpm -e --noscripts splitser
-  sudo dnf install ./Splitser-0.1.25-x86_64.rpm
-  ```
+  **Corrected 2026-10-21.** This entry used to say the scriptlet "failed the whole transaction", and handed
+  Fedora users `sudo rpm -e --noscripts splitser` plus a fresh install as "one-time recovery". Both were
+  wrong, and wrong in the direction that costs someone something: it read a cosmetic exit status as a broken
+  install, and the advice had people tear out a working copy to fix nothing. Re-read from the terminal
+  capture taken the day the fix was written. If `/usr/bin/splitser` ever is missing after an upgrade,
+  reinstalling the package restores it.
 
 ## 0.1.24 — 2026-08-18
 ### Changed
