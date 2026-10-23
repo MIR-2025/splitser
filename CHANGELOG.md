@@ -1,11 +1,36 @@
 # Changelog
 
 All notable changes to Splitser. Each version is a tagged CI release; installers
-(`.deb` / `.rpm` / `.AppImage` / `.exe` / `.dmg`) are built per tag. The macOS `.dmg` is signed
-with a Developer ID and notarized by Apple; the Windows `.exe` and the Linux packages are still
-**unsigned** (expect a SmartScreen prompt on Windows). Which builds have actually been run on
-real hardware varies by release -- the Linux `.deb` is what's used here day to day; the download
-page on splitser.org tracks the per-release, per-artifact verification status.
+(`.deb` / `.rpm` / `.AppImage` / `.exe` / `.dmg`) are built per tag. **No tag has produced a
+`.dmg` since 0.1.36**: v0.1.37 to v0.1.42 failed inside keychain handling and 0.1.43 onward fail
+notarization on a credential that stopped working, so recent releases carry four artifacts rather
+than six (the 0.1.42 images on splitser.org were built from a branch and published by hand). When
+the `.dmg` does build it is signed with a Developer ID and notarized by Apple. The Windows `.exe`
+and the Linux packages are still **unsigned** (expect a SmartScreen prompt on Windows). Which
+builds have actually been run on real hardware varies by release -- the Linux `.deb` is what's
+used here day to day; the download page on splitser.org tracks the per-release, per-artifact
+verification status.
+
+## 0.1.44 -- 2026-10-22
+### Fixed
+- **Pop-up sign-in windows work again.** When a page opens a genuine pop-up -- the "Sign in
+  with..." and consent windows that hand their answer back to the page that opened them -- it now
+  gets a real window instead of being turned into a new pane. A pane is a detached view with no
+  link back to its opener, so these flows used to wait forever for a reply that could never
+  arrive: the opening page was handed nothing by `window.open()` and had no way to tell whether
+  you had finished or cancelled. Nothing timed out and nothing errored, so it read as a broken
+  site rather than a broken browser. Links are deliberately unchanged -- `target="_blank"`,
+  middle-click and "Open link in new pane" still open a pane, which is the whole point of them.
+  A pop-up shares the session of the page that opened it, so the sign-in keeps the same cookies
+  and the same ad and tracker blocking, and it runs with no Node access and no preload.
+
+### Known limits
+- **Passkeys still do not work, and this release does not change that.** A site that asks for a
+  passkey hangs with no prompt rather than failing: the request is made and then waits for an
+  authenticator that never appears, because Electron provides no passkey interface for the
+  browser to drive, and on Linux there is no built-in authenticator to offer either. The pop-up
+  fix above is a real fix for password and OAuth sign-ins, and it does not reach this. Where a
+  site allows it, use a password or a one-time code. Measured against both 0.1.43 and 0.1.44.
 
 ## 0.1.43 — 2026-10-21
 ### Added
@@ -44,7 +69,12 @@ page on splitser.org tracks the per-release, per-artifact verification status.
   To be precise about what was broken, since the download page has been offering signed disk
   images throughout: the **tag** produced no `.dmg` at all for six releases. The 0.1.42 images on
   splitser.org were built from a branch carrying this same fix and published by hand, so they are
-  signed and notarized like any other. 0.1.43 is the first tag to build them unaided.
+  signed and notarized like any other. 0.1.43 did **not** end that run: its Mac legs signed
+  correctly and then failed notarization with `HTTP status code: 401. Invalid credentials`,
+  because the app-specific password used for notarization had stopped working -- so 0.1.43
+  shipped without a `.dmg` as well. *(Corrected 2026-10-22. The sentence here previously said
+  0.1.43 was the first tag to build them unaided; it was written before the release ran, and
+  the release disproved it.)*
 - **The `.AppImage` starts on distributions that restrict unprivileged user namespaces.** The
   0.1.37 AppImage aborted immediately with `chrome-sandbox ... is not configured correctly`: an
   AppImage is mounted `nosuid`, so it cannot use the SUID sandbox helper, and Ubuntu 24.04 blocks
