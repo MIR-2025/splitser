@@ -47,9 +47,46 @@ jobs:
       - name: Build installers
         shell: bash
         run: |
+          # electron-builder takes the App Store Connect key as a FILE PATH, so the secret
+          # (the .p8's contents) is written to the runner's temp dir, which the job discards.
+          # The Apple ID pair is unset because getNotarizeOptions checks THAT branch first --
+          # while APPLE_ID is set the API key is never read, which is how v0.1.43 and v0.1.44
+          # both failed with a 401 against a dead app-specific password while a good key sat
+          # unused. Mirrors mirsolo.com's desktop.yml, notarizing since its 0.1.2.
+          notarize=
+          extra=()
+          if [ -n "$APPLE_API_KEY_P8" ] && [ -n "$APPLE_API_KEY_ID" ] && [ -n "$APPLE_API_ISSUER" ]; then
+            export APPLE_API_KEY="$RUNNER_TEMP/AuthKey_$APPLE_API_KEY_ID.p8"
+            (umask 077; printf '%s\n' "$APPLE_API_KEY_P8" > "$APPLE_API_KEY")
+            unset APPLE_API_KEY_P8 APPLE_ID APPLE_APP_SPECIFIC_PASSWORD
+            notarize="API key $APPLE_API_KEY_ID"
+            echo "notarizing with: $notarize"
+          else
+            if [ "${{ startsWith(matrix.os, 'macos') }}" = true ]; then
+              miss=
+              [ -z "$APPLE_API_KEY_P8" ]  && miss="$miss SPLITSER_APPLE_API_KEY_P8"
+              [ -z "$APPLE_API_KEY_ID" ]  && miss="$miss SPLITSER_APPLE_API_KEY_ID"
+              [ -z "$APPLE_API_ISSUER" ]  && miss="$miss SPLITSER_APPLE_API_ISSUER"
+              echo "::warning::not notarizing -- missing secret(s):$miss"
+              echo "::warning::The dmg will be SIGNED but NOT notarized, so Gatekeeper still warns on first open."
+            fi
+            unset APPLE_API_KEY_P8 APPLE_API_KEY_ID APPLE_API_ISSUER APPLE_ID APPLE_APP_SPECIFIC_PASSWORD
+            # Be explicit rather than leaving electron-builder to discover it has no credentials:
+            # without this it attempts notarization and fails late, which reads as a broken build
+            # rather than an unset secret.
+            extra+=(-c.mac.notarize=false)
+          fi
           n=0
           log=$(mktemp)
-          until npx electron-builder ${{ matrix.targets }} --publish never 2>&1 | tee "$log"; do
+          until npx electron-builder ${{ matrix.targets }} "${extra[@]}" --publish never 2>&1 | tee "$log"; do
+            if grep -q 'HTTP status code: 401\|Invalid credentials' "$log"; then
+              echo "::error::macOS notarization failed: Apple rejected the credential (HTTP 401)."
+              echo "::error::Deterministic -- the same credential fails identically every time, so it is NOT retried."
+              echo "::error::Check the key outside CI:  apple-key-check <AuthKey_*.p8> <KEY_ID> <ISSUER_ID>"
+              echo "::error::Also confirm SPLITSER_APPLE_ID / SPLITSER_APPLE_APP_PASSWORD are DELETED: while"
+              echo "::error::APPLE_ID is set, electron-builder picks that branch and never reads the API key."
+              exit 1
+            fi
             if grep -q 'set-key-partition-list\|No identity found\|Command failed: /usr/bin/security' "$log"; then
               echo "::error::macOS code signing failed -- this is a credential problem, not a flaky runner."
               echo "::error::'security set-key-partition-list' fails when the .p12 has no PRIVATE KEY in it"
@@ -74,9 +111,13 @@ jobs:
           # rather than editing this block.
           CSC_LINK: ${{ startsWith(matrix.os, 'macos') && secrets.SPLITSER_MAC || '' }}
           CSC_KEY_PASSWORD: ${{ startsWith(matrix.os, 'macos') && secrets.SPLITSER_MAC_CSC_PASSWORD || '' }}
-          APPLE_ID: ${{ startsWith(matrix.os, 'macos') && secrets.SPLITSER_APPLE_ID || '' }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ startsWith(matrix.os, 'macos') && secrets.SPLITSER_APPLE_APP_PASSWORD || '' }}
           APPLE_TEAM_ID: ${{ startsWith(matrix.os, 'macos') && secrets.SPLITSER_APPLE_TEAM_ID || '' }}
+          # Notarization via an App Store Connect API key. The Apple ID route is deliberately
+          # NOT wired: an app-specific password dies whenever the Apple ID password changes,
+          # which is what silently broke 0.1.43. An API key survives that.
+          APPLE_API_KEY_P8: ${{ startsWith(matrix.os, 'macos') && secrets.SPLITSER_APPLE_API_KEY_P8 || '' }}
+          APPLE_API_KEY_ID: ${{ startsWith(matrix.os, 'macos') && secrets.SPLITSER_APPLE_API_KEY_ID || '' }}
+          APPLE_API_ISSUER: ${{ startsWith(matrix.os, 'macos') && secrets.SPLITSER_APPLE_API_ISSUER || '' }}
       - uses: actions/upload-artifact@v7
         with:
           name: splitser-${{ matrix.artifact }}
