@@ -48,6 +48,7 @@ function markActive() {   // visual focus indicator: accent the pane that has fo
 let favOverrides = {};
 try { favOverrides = JSON.parse(localStorage.getItem('favicons') || '{}') || {}; } catch (e) { favOverrides = {}; }
 function favHost(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } }
+function favOrigin(u) { try { return new URL(u).origin; } catch { return ''; } }   // scheme+host+PORT -- two dev servers on localhost are NOT the same site, even though favHost says they are
 function favOv(host) { return host ? favOverrides[host] : null; }
 function saveFavs() { try { localStorage.setItem('favicons', JSON.stringify(favOverrides)); } catch (e) { /* ignore */ } }
 
@@ -412,6 +413,7 @@ function makePane(url, beforeEl = null, tabUrls = null) {
   star.addEventListener('click', pane.toggleBookmark);
   keyBtn.addEventListener('click', () => Vault.fillPane(pane));
   fav.addEventListener('click', (e) => { e.stopPropagation(); openFavPicker(pane); });   // set a custom icon (localhost etc.)
+  fav.addEventListener('error', () => { fav.removeAttribute('src'); fav.classList.add('fav-empty'); });   // a URL that 404s shows the empty slot, never a broken-image glyph
   shieldBtn.addEventListener('click', (e) => { e.stopPropagation(); pane.openShields(); });
   lockBtn.addEventListener('click', (e) => { e.stopPropagation(); openCertPopover(pane); });
   muteBtn.addEventListener('click', pane.toggleMute);
@@ -505,6 +507,25 @@ function plainTextThemeInject() {
     'font:13px/1.6 ui-monospace,Menlo,Consolas,monospace!important;tab-size:4}';
   (document.head || document.documentElement).appendChild(st);
 }
+// The icon candidates a page DECLARES, best first, read from the guest itself. Needed because
+// page-favicon-updated only fires when Chromium decides a page's candidates have changed: a reload
+// announces nothing, and a site whose icon is already cached from another tab announces nothing
+// either. This is how a tab recovers an icon it was never told about. (2026-10-26)
+function faviconLinksInject() {
+  var out = [], seen = {}, links = document.querySelectorAll('link[rel]');
+  for (var i = 0; i < links.length; i++) {
+    var rel = (links[i].getAttribute('rel') || '').toLowerCase().split(/\s+/);
+    var isIcon = rel.indexOf('icon') >= 0;                      // rel="icon" / "shortcut icon"
+    if (!isIcon && rel.indexOf('apple-touch-icon') < 0) continue;
+    var href = links[i].href;                                   // .href on a <link> is absolute already
+    if (!href || seen[href]) continue;
+    seen[href] = 1;
+    var m = (links[i].getAttribute('sizes') || '').match(/\d+/);
+    out.push({ href: href, icon: isIcon ? 1 : 0, size: m ? +m[0] : 0 });
+  }
+  out.sort(function (a, b) { return (b.icon - a.icon) || (b.size - a.size); });   // a real icon beats a touch icon; then biggest wins
+  return out.map(function (e) { return e.href; });
+}
 // Open a finished download INSIDE Splitser (a new tab) for anything we can render; hand the rest to
 // the OS. Fixes "saved a .md, clicked Open, and it opened in Brave" -- renderable files stay in-app.
 function openDownloadedFile(path) {
@@ -563,16 +584,51 @@ function addTab(pane, url) {
       if (active()) updateTitle();
     } catch (e) { /* not attached yet */ }
   };
+  // Take the first candidate that actually LOADS, and only if we are still on the page that
+  // offered it. Chromium hands over candidates it has not fetched: a page declaring an icon that
+  // 404s, or any site with no icon at all, still arrives as a page-favicon-updated carrying a URL
+  // that is not there. Assigning one blindly left a broken-image glyph in the address bar, whose
+  // <img> had no error handler, and threw away the remaining candidates. (2026-10-26)
+  const takeFavicon = (list, onlyIfEmpty) => {
+    if (onlyIfEmpty && tab.realFavicon) return;                      // a better icon arrived while we were looking
+    const href = list.shift();
+    if (!href) { syncFav(); return; }                                // nothing loaded: leave the icon as it was
+    const was = favOrigin(view.getURL());
+    const im = new Image();
+    im.onload = () => {
+      if (onlyIfEmpty && tab.realFavicon) return;
+      if (favOrigin(view.getURL()) !== was) return;                  // navigated away: not this page's icon
+      tab.realFavicon = href; syncFav();
+    };
+    im.onerror = () => takeFavicon(list, onlyIfEmpty);               // that one is not there: try the next
+    im.src = href;
+  };
+  // Same idea as adoptTitle, for the icon: if the page never announced one, go and look. Needed
+  // because page-favicon-updated fires only when Chromium decides the candidates CHANGED -- a
+  // site whose icon it already holds from another tab announces nothing at all.
+  const adoptFavicon = () => {
+    const at = view.getURL() || '';
+    if (tab.realFavicon || tab.isDevtools || !/^https?:/.test(at)) return;
+    let origin = ''; try { origin = new URL(at).origin; } catch (e) { return; }
+    const wellKnown = [origin + '/favicon.ico'];
+    view.executeJavaScript('(' + faviconLinksInject.toString() + ')()')
+      .then((hrefs) => takeFavicon((hrefs || []).concat(wellKnown), true))
+      .catch(() => takeFavicon(wellKnown, true));
+  };
 
-  view.addEventListener('did-navigate', () => { tab.url = view.getURL(); tab.realFavicon = ''; tab.drm = isDrmHost(tab.url); tab.certError = null; if (tab.settled) flagUnseen(pane, tab); tab.settled = false; syncFav(); if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); pane.syncDrmNote(); pane.syncCertError(); pane.updateLock(); } saveSession(); });
+  // Only a DIFFERENT site invalidates the icon. This used to clear it on every navigation, a
+  // reload included, and then wait for page-favicon-updated to put it back -- an event that never
+  // came, because the page's icon candidates had not changed. The tab just went blank and stayed
+  // blank, on every site. (2026-10-26)
+  view.addEventListener('did-navigate', () => { const was = favOrigin(tab.url); tab.url = view.getURL(); if (favOrigin(tab.url) !== was) tab.realFavicon = ''; tab.drm = isDrmHost(tab.url); tab.certError = null; if (tab.settled) flagUnseen(pane, tab); tab.settled = false; syncFav(); if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); pane.syncDrmNote(); pane.syncCertError(); pane.updateLock(); } saveSession(); });
   view.addEventListener('did-navigate-in-page', () => { tab.url = view.getURL(); if (active()) pane.syncAddr(); });
   view.addEventListener('dom-ready', () => { try { tab.wcId = view.getWebContentsId(); } catch (e) { /* not attached yet */ } adoptTitle(); if (active()) { pane.syncAddr(); pane.refreshStar(); Vault.refreshPaneKey(pane); pane.refreshShield(); } });
   view.addEventListener('did-start-loading', () => { tab.loading = true; tab.drm = false; try { tab.wcId = view.getWebContentsId(); } catch (e) { /* not attached yet */ } tab.certError = null; tabEl.classList.add('loading'); if (active()) { pane.spin.hidden = false; pane.syncDrmNote(); pane.syncCertError(); } });
-  view.addEventListener('did-stop-loading', () => { tab.loading = false; tab.settled = true; tabEl.classList.remove('loading'); adoptTitle(); if (active()) { pane.spin.hidden = true; pane.syncAddr(); } const u = view.getURL(); if (/^https?:/.test(u) && !pane.incognito) api.historyAdd({ url: u, title: tab.title });   // adoptTitle first, so history records the real title too
+  view.addEventListener('did-stop-loading', () => { tab.loading = false; tab.settled = true; tabEl.classList.remove('loading'); adoptTitle(); adoptFavicon(); if (active()) { pane.spin.hidden = true; pane.syncAddr(); } const u = view.getURL(); if (/^https?:/.test(u) && !pane.incognito) api.historyAdd({ url: u, title: tab.title });   // adoptTitle first, so history records the real title too
     if (/^file:\/\/.*\.(md|markdown)(\?|#|$)/i.test(u)) view.executeJavaScript('(' + mdViewerInject.toString() + ')()').catch(() => {});   // render local markdown
     else if (/^file:\/\//i.test(u) || /\.(txt|text|log|csv|tsv|json|xml|ya?ml|ini|conf|cfg|md5|sha\d*sums?)(\?|#|$)/i.test(u)) view.executeJavaScript('(' + plainTextThemeInject.toString() + ')()').catch(() => {}); });   // make raw text/plain readable
   view.addEventListener('page-title-updated', (e) => { tab.title = e.title || tab.url; ttitle.textContent = tab.title; if (active()) updateTitle(); if (tab.settled) flagUnseen(pane, tab); });   // no title= -- the hover card (below) is the tooltip now
-  view.addEventListener('page-favicon-updated', (e) => { const f = (e.favicons || [])[0]; if (f) tab.realFavicon = f; syncFav(); });
+  view.addEventListener('page-favicon-updated', (e) => { takeFavicon((e.favicons || []).slice(0, 6), false); });   // every candidate it offers, not just the first, and only once one loads
   view.addEventListener('update-target-url', (e) => { hoverEl.textContent = e.url || ''; });
   view.addEventListener('found-in-page', (e) => { if (active()) { const r = e.result; pane.findCount.textContent = r.matches ? r.activeMatchOrdinal + '/' + r.matches : 'no matches'; } });
   view.addEventListener('media-started-playing', () => { tab.audio = true; if (active()) pane.muteBtn.hidden = false; });

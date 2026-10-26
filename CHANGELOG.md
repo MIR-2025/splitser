@@ -4,12 +4,37 @@ All notable changes to Splitser. Each version is a tagged CI release; installers
 (`.deb` / `.rpm` / `.AppImage` / `.exe` / `.dmg`) are built per tag. **No tag has produced a
 `.dmg` since 0.1.36**: v0.1.37 to v0.1.42 failed inside keychain handling and 0.1.43 onward fail
 notarization on a credential that stopped working, so recent releases carry four artifacts rather
-than six (the 0.1.42 images on splitser.org were built from a branch and published by hand). When
+than six (the 0.1.42 images on splitser.org were built from a branch and published by hand). The
+cause is fixed on `main` -- a manual CI run has notarized both Mac builds -- but no *tag* has
+carried that fix yet, so the sentence above still describes every release you can download. When
 the `.dmg` does build it is signed with a Developer ID and notarized by Apple. The Windows `.exe`
 and the Linux packages are still **unsigned** (expect a SmartScreen prompt on Windows). Which
 builds have actually been run on real hardware varies by release -- the Linux `.deb` is what's
 used here day to day; the download page on splitser.org tracks the per-release, per-artifact
 verification status.
+
+## 0.1.45 -- unreleased
+### Fixed
+- **Tab icons stay put.** A site's icon used to disappear the moment you reloaded the page or
+  followed a link inside the same site, on every site, and the tab then stayed blank for the rest
+  of its life. The tab threw its icon away on every navigation and waited to be told the new one,
+  but a browser only announces an icon when it decides the page's icon has *changed* -- and a
+  reload changes nothing, so nothing was ever announced. Now only moving to a different site
+  clears it. A page that never announces an icon is also looked up directly -- what the page
+  declares first, then the well-known `/favicon.ico` -- which fixes the other half of this: a
+  blank tab on a site whose icon the browser already had from another tab.
+- **No more broken-image square where an icon should be.** A site that declares an icon which
+  isn't there, or has no icon at all, used to put that dead address straight into the address bar,
+  which had no way to recover from an image that fails to load. Icons are now loaded before they
+  are used, so a dead one is skipped and the slot just stays empty.
+
+### Changed
+- **The `.dmg` is signed and notarized again, by a different kind of credential.** Releases since
+  0.1.36 shipped without a Mac build because notarization authenticated with an Apple ID and an
+  app-specific password, which stopped working. It now uses an App Store Connect API key instead.
+  A key can only fail; an Apple ID password that a build retries can get the account itself locked,
+  which is what happened on 2026-10-21. Committed 2026-10-23 and proven by a manual CI run that
+  notarized both architectures; this is the first *tag* to carry it.
 
 ## 0.1.44 -- 2026-10-22
 ### Fixed
