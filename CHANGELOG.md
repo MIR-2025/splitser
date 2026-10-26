@@ -13,7 +13,7 @@ builds have actually been run on real hardware varies by release -- the Linux `.
 used here day to day; the download page on splitser.org tracks the per-release, per-artifact
 verification status.
 
-## 0.1.45 -- unreleased
+## 0.1.45 -- 2026-10-26
 ### Fixed
 - **Tab icons stay put.** A site's icon used to disappear the moment you reloaded the page or
   followed a link inside the same site, on every site, and the tab then stayed blank for the rest
