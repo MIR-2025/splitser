@@ -1,14 +1,12 @@
 # Changelog
 
 All notable changes to Splitser. Each version is a tagged CI release; installers
-(`.deb` / `.rpm` / `.AppImage` / `.exe` / `.dmg`) are built per tag. **No tag has produced a
-`.dmg` since 0.1.36**: v0.1.37 to v0.1.42 failed inside keychain handling and 0.1.43 onward fail
-notarization on a credential that stopped working, so recent releases carry four artifacts rather
-than six (the 0.1.42 images on splitser.org were built from a branch and published by hand). The
-cause is fixed on `main` -- a manual CI run has notarized both Mac builds -- but no *tag* has
-carried that fix yet, so the sentence above still describes every release you can download. When
-the `.dmg` does build it is signed with a Developer ID and notarized by Apple. The Windows `.exe`
-and the Linux packages are still **unsigned** (expect a SmartScreen prompt on Windows). Which
+(`.deb` / `.rpm` / `.AppImage` / `.exe` / `.dmg`) are built per tag. **0.1.45 is the first tag
+since 0.1.36 to produce a `.dmg`**: v0.1.37 to v0.1.42 failed inside keychain handling, and v0.1.43
+and v0.1.44 failed notarization on a credential that had stopped working, so those releases carry
+four artifacts rather than six (the 0.1.42 images on splitser.org were built from a branch and
+published by hand). The `.dmg` is signed with a Developer ID and notarized by Apple. The Windows
+`.exe` and the Linux packages are still **unsigned** (expect a SmartScreen prompt on Windows). Which
 builds have actually been run on real hardware varies by release -- the Linux `.deb` is what's
 used here day to day; the download page on splitser.org tracks the per-release, per-artifact
 verification status.
