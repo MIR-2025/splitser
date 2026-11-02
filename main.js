@@ -693,7 +693,16 @@ app.whenReady().then(() => {
   // Permissions: default-DENY. A couple of harmless ones auto-allow; a known-sensitive set prompts;
   // everything else (clipboard-READ, display-capture, usb/serial/hid, ...) is denied outright.
   const AUTO_ALLOW = new Set(['fullscreen', 'clipboard-sanitized-write']);
-  const PROMPT = new Set(['media', 'geolocation', 'notifications', 'midi', 'midiSysex', 'pointerLock']);
+  const PROMPT = new Set(['media', 'geolocation', 'notifications', 'midi', 'midiSysex']);
+  // pointerLock is deliberately absent, so it falls through to the deny below. Chrome 131+ does gate
+  // it behind a permission, but Electron hands the handler only isMainFrame and requestingUrl -- no
+  // user-activation flag -- so a genuine request and a silent probe look identical here. In practice
+  // only the probe shows up: on id.synchrony.com the caller is Akamai Bot Manager's sensor (bmak;
+  // _abck/bm_sz cookies), firing during load on a bare <div> with no interaction at all. Prompting
+  // there teaches the habit of clicking Allow on a bank sign-in page, and the dialog is parented to
+  // the main window, so a BACKGROUND pane can block the whole app with one. Cost: a web game or 3D
+  // map in a pane cannot capture the mouse -- it gets pointerlockerror, the same as clicking Block.
+  // Verified 2026-11-02 by hooking Element.prototype.requestPointerLock in a same-origin iframe.
 
   // Apply the SAME protections (ad/tracker blocking, download handling, default-deny permissions) to
   // every session -- the persistent one AND the ephemeral 'split-incognito' one that private workspaces use.
