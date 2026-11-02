@@ -3,7 +3,7 @@
 // password} up to the host via sendToHost, so the vault (which holds the key, over in the host
 // renderer) can OFFER to save it. Nothing is stored here; it reports the current form once and
 // is otherwise inert. Wrapped in try/catch throughout so it can never break a page.
-const { ipcRenderer, webFrame } = require('electron');   // webFrame: reaches the page's main world
+const { ipcRenderer, webFrame, contextBridge } = require('electron');   // webFrame: reaches the page's main world
 
 let lastSent = '';
 
@@ -281,3 +281,56 @@ try {
       JSON.stringify((location.hostname || '').replace(/^www\./, '')) + ',' + JSON.stringify(!!(on && seed)) + ')');
   }
 } catch (e) { /* never break a page */ }
+
+// ---- window.prompt(): give the page back the one dialog Electron refuses ----
+// Electron implements alert() and confirm() and deliberately does not implement prompt() -- it
+// THROWS "prompt() is not supported.", which is worse than returning null, because the exception
+// takes out the rest of the page's script rather than sending it down the Cancel path it already
+// handles. Measured 2026-11-01 against the packaged build.
+//
+// Two worlds, on purpose:
+//   - The blocking request is made HERE, in the isolated world, where the page's CSP does not
+//     apply and the page cannot see, patch or spy on the channel.
+//   - window.prompt itself has to live in the page's MAIN world, which a sandboxed preload can
+//     only reach through webFrame.executeJavaScript -- the same route the farbling patch uses.
+// contextBridge is the join: a function exposed across the boundary is called SYNCHRONOUSLY and
+// returns its value, which is exactly the shape prompt() needs.
+//
+// The sync XHR is what actually blocks, and it blocks only THIS renderer -- main answers it from
+// a promise, so every other pane keeps running. Sync XHR on the main thread is deprecated and
+// that is fine: a modal prompt is the one case where blocking the page is the correct behaviour.
+const MY_WC_ID = (() => { try { return ipcRenderer.sendSync('dialog:whoami'); } catch (e) { return 0; } })();
+try {
+  contextBridge.exposeInMainWorld('__splitserDialogBridge', {
+    prompt(message, defaultValue) {
+      try {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', 'splitser-dialog://ask', false);   // false === synchronous
+        xhr.setRequestHeader('content-type', 'application/json');
+        xhr.send(JSON.stringify({
+          kind: 'prompt',
+          wcId: MY_WC_ID,
+          message: String(message == null ? '' : message).slice(0, 2000),
+          defaultValue: String(defaultValue == null ? '' : defaultValue).slice(0, 2000),
+          origin: location.origin
+        }));
+        const out = JSON.parse(xhr.responseText || '{}');
+        // null means the user cancelled, which is what the DOM spec says prompt() returns.
+        return out && typeof out.value === 'string' ? out.value : null;
+      } catch (e) {
+        // Never throw out of prompt(): that is the exact failure being fixed here.
+        return null;
+      }
+    }
+  });
+  webFrame.executeJavaScript('(' + function () {
+    'use strict';
+    var bridge = window.__splitserDialogBridge;
+    if (!bridge) return;
+    try { delete window.__splitserDialogBridge; } catch (e) { /* non-configurable: leave it */ }
+    Object.defineProperty(window, 'prompt', {
+      value: function prompt(message, defaultValue) { return bridge.prompt(message, defaultValue); },
+      writable: true, enumerable: false, configurable: true
+    });
+  } + ')()');
+} catch (e) { /* never break the page */ }

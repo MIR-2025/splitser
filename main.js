@@ -1,7 +1,7 @@
 // Splitser (splitser.org) — main process. Hosts the renderer UI with <webview> enabled
 // (real Chromium views, no header-strip), owns the data layer (history/bookmarks/session/
 // settings via store.js), and handles downloads + permission prompts on the shared session.
-import { app, BrowserWindow, ipcMain, session as electronSession, dialog, shell, clipboard, nativeImage, webContents, Menu, screen } from 'electron';
+import { app, BrowserWindow, ipcMain, session as electronSession, dialog, shell, clipboard, nativeImage, webContents, Menu, screen, protocol } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
 import { randomBytes } from 'node:crypto';
@@ -37,6 +37,79 @@ else {
     if (workspaceFromArgv(argv)) win.webContents.send('open-workspace', url);
     else if (url) win.webContents.send('open-pane', url);
   });
+}
+
+// ---- window.prompt(), which Electron refuses to implement ----
+// Measured 2026-11-01 against the packaged build: prompt() THROWS "prompt() is not supported.",
+// so `const name = prompt(...)` does not return null -- it kills the rest of the page's script.
+// alert() and confirm() work (Electron renders a bare detached OS box); only prompt is missing.
+//
+// prompt() must return a STRING SYNCHRONOUSLY, so something has to block. The choice of what to
+// block is the whole design:
+//   - ipcRenderer.sendSync would block the guest, but main must set event.returnValue before its
+//     handler returns, so main cannot wait for a human. Dead end.
+//   - Blocking MAIN (a native dialog via zenity/osascript) freezes every pane at once, which is a
+//     poor trade in a browser whose entire point is that the other panes are live.
+// So: the guest blocks on a SYNCHRONOUS request to this custom scheme, protocol.handle answers it
+// with a PROMISE, and main stays on its event loop throughout. Only the asking pane is frozen.
+//
+// The request is issued from the preload's ISOLATED world, not the page's, so the page's own CSP
+// (connect-src) cannot block the browser's own dialog. bypassCSP is set here as a belt-and-braces
+// second reason; corsEnabled + an explicit allow-origin header are what let the XHR read a reply.
+const DIALOG_SCHEME = 'splitser-dialog';
+protocol.registerSchemesAsPrivileged([{
+  scheme: DIALOG_SCHEME,
+  privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, bypassCSP: true }
+}]);
+
+// main's half: take the blocked guest's question, put it to the human in the host UI, and answer
+// the still-open request when they reply. Nothing here blocks -- the guest is parked on its socket.
+let dialogSeq = 0;
+const pendingDialogs = new Map();   // request id -> resolve(stringOrNull)
+
+function settleDialog(id, value) {
+  const resolve = pendingDialogs.get(id);
+  if (!resolve) return;
+  pendingDialogs.delete(id);
+  resolve(typeof value === 'string' ? value : null);
+}
+ipcMain.on('dialog:answer', (_e, d) => settleDialog(d && d.id, d && d.value));
+// Every blocked pane MUST be released. If the host window goes away while a prompt is open,
+// nothing will ever answer it and the guest would sit on its synchronous request until killed.
+// Bound to the HOST window only -- an earlier draft hung this on browser-window-created, which
+// meant closing an unrelated popup (an OAuth window, say) silently cancelled a live prompt in
+// another pane.
+function releaseBlockedPanes() { for (const id of [...pendingDialogs.keys()]) settleDialog(id, null); }
+
+async function handleDialogRequest(request) {
+  let body = {};
+  try { body = await request.json(); } catch { /* malformed -> treated as a cancel below */ }
+  const value = await new Promise((resolve) => {
+    // No host UI to ask: answer null, which prompt() reports as a cancel. Never leave it hanging.
+    if (!win || win.isDestroyed() || !body || body.kind !== 'prompt') return resolve(null);
+    const id = ++dialogSeq;
+    pendingDialogs.set(id, resolve);
+    win.webContents.send('dialog:ask', {
+      id,
+      kind: 'prompt',
+      message: String(body.message || '').slice(0, 2000),
+      defaultValue: String(body.defaultValue || '').slice(0, 2000),
+      // The ORIGIN that asked, shown in the dialog. A page cannot be trusted to say who it is, so
+      // this is taken from the guest's own committed URL via its webContents id -- not from the
+      // body, which is just what the page's renderer claimed.
+      origin: originOfWc(body.wcId)
+    });
+  });
+  return new Response(JSON.stringify({ value }), {
+    headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' }
+  });
+}
+function originOfWc(id) {
+  try {
+    const wc = Number(id) ? webContents.fromId(Number(id)) : null;
+    if (!wc || wc.isDestroyed()) return '';
+    return new URL(wc.getURL()).origin;
+  } catch { return ''; }
 }
 
 // ---- shields: ad/tracker blocking, on by default, with a per-site allowlist ----
@@ -160,6 +233,7 @@ function createWindow() {
     }
   }
   win = new BrowserWindow(winOpts);
+  win.on('closed', releaseBlockedPanes);   // never leave a pane parked on an unanswerable prompt
   if (savedWin && savedWin.maximized) win.maximize();
   win.setMenuBarVisibility(false);
   // remember size / position / monitor + maximized state whenever they change
@@ -187,6 +261,31 @@ function createWindow() {
   win.webContents.on('will-navigate', (e) => e.preventDefault());
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   wireShortcuts(win.webContents);
+}
+
+// ---- handing a link to the OS ----
+// A mailto: link did nothing at all before this: a same-tab click went to will-navigate, which
+// nothing handled, and Chromium cannot load the scheme, so the click silently died; a target=_blank
+// one hit setWindowOpenHandler's `if (!/^(https?:|about:)/) deny`. Measured 2026-11-01 against the
+// packaged 0.1.44 -- the pane's URL was unchanged and no process started.
+//
+// The scheme list is an ALLOWLIST, and it stays short on purpose. shell.openExternal hands a string
+// to the OS to dispatch, and the OS will happily launch a registered handler for schemes far more
+// interesting than mail -- so "anything that isn't http" is the one rule that must not be written
+// here. mailto/tel/sms are the three a web page has a legitimate reason to ask a BROWSER for.
+const OS_SCHEMES = /^(mailto|tel|sms):/i;
+// A page can script a navigation, so a hostile or merely broken one could ask for a thousand compose
+// windows. One per 1.5s per pane is far below anything a human clicks and well above an accident.
+const lastExternal = new Map();   // webContents id -> ms
+function openExternally(url, wcId) {
+  if (typeof url !== 'string' || url.length > 2048 || !OS_SCHEMES.test(url)) return false;
+  const now = Date.now();
+  if (now - (lastExternal.get(wcId) || 0) < 1500) return false;
+  lastExternal.set(wcId, now);
+  // openExternal REJECTS rather than throwing -- an unhandled rejection here would be a crash report
+  // for a link that simply has no handler installed, so swallow it deliberately.
+  shell.openExternal(url).catch(() => { /* no handler registered for the scheme -- nothing to do */ });
+  return true;
 }
 
 // ---- data-layer IPC ----
@@ -225,6 +324,7 @@ ipcMain.handle('cert:proceed', (_e, { wcId, host, url }) => {   // user clicked 
 const dlPaths = new Set();   // full paths of files we've saved -- open/reveal is gated to these
 ipcMain.on('app:home', (e) => { e.returnValue = app.getPath('home'); });   // sync home dir for the sandboxed preload
 ipcMain.on('app:version', (e) => { e.returnValue = app.getVersion(); });   // sync app version for the About popover
+ipcMain.on('dialog:whoami', (e) => { e.returnValue = e.sender.id; });   // the guest's own wcId, so main can name the origin that asked
 ipcMain.on('app:ready', () => {   // renderer restore done -> open this launch's URL
   if (!win || win.isDestroyed()) return;
   if (pendingWorkspace) { win.webContents.send('open-workspace', pendingUrl); pendingWorkspace = false; pendingUrl = ''; return; }
@@ -536,6 +636,7 @@ ipcMain.on('http-auth-reply', (_e, { id, username, password }) => {
 });
 
 app.whenReady().then(() => {
+
   if (!gotSingleLock) return;   // a non-primary instance is quitting -- don't build a session/window
   // Present as vanilla Chrome: drop the "Splitser/x" and "Electron/x" UA tokens. Some sites (Google
   // sign-in, banks) refuse or degrade for anything advertising Electron -- bad for a logged-in-apps browser.
@@ -562,6 +663,11 @@ app.whenReady().then(() => {
   // Apply the SAME protections (ad/tracker blocking, download handling, default-deny permissions) to
   // every session -- the persistent one AND the ephemeral 'split-incognito' one that private workspaces use.
   function wireSession(ses) {
+    // The dialog scheme has to be registered on the session the PANES use, not the default one.
+    // protocol.handle() binds to the default session; a <webview> on partition 'persist:split'
+    // never sees it, and the request fails as a bare "Failed to fetch" with nothing in the main
+    // log -- which is exactly what it did on the first attempt, from both fetch() and sync XHR.
+    ses.protocol.handle(DIALOG_SCHEME, (request) => handleDialogRequest(request));
     ses.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, onBeforeRequest);
     ses.on('will-download', (_e, item, wc) => {
       const id = ++dlId;
@@ -629,6 +735,8 @@ app.whenReady().then(() => {
   app.on('web-contents-created', (_e, contents) => {
     if (contents.getType() !== 'webview') return;
     contents.setWindowOpenHandler(({ url, frameName, features, disposition }) => {
+      // <a href="mailto:..." target="_blank"> -- hand it to the OS instead of dropping it.
+      if (OS_SCHEMES.test(url)) { openExternally(url, contents.id); return { action: 'deny' }; }
       if (!/^(https?:|about:)/.test(url)) return { action: 'deny' };
       // A pane is the right home for a LINK -- target=_blank, middle-click, "open in new tab".
       // It is the WRONG home for a real window.open(), because a pane is a detached top-level
@@ -669,6 +777,13 @@ app.whenReady().then(() => {
           }
         }
       };
+    });
+    // The ordinary case: <a href="mailto:...">. Chromium cannot navigate to it, so without this the
+    // click is swallowed in silence -- the worst failure, because the page looks like it ignored you.
+    contents.on('will-navigate', (ev, url) => {
+      if (!OS_SCHEMES.test(url)) return;
+      ev.preventDefault();          // keep the pane where it is; only the mail client should move
+      openExternally(url, contents.id);
     });
     contents.on('did-start-navigation', (_ev, url, isInPlace, isMainFrame) => {   // new page -> reset its block count
       if (isMainFrame && !isInPlace) {

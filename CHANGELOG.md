@@ -11,6 +11,27 @@ builds have actually been run on real hardware varies by release -- the Linux `.
 used here day to day; the download page on splitser.org tracks the per-release, per-artifact
 verification status.
 
+## Unreleased
+### Added
+- **Pages can ask you a question again.** A site that calls `prompt()` -- "what should this file be
+  called?", the one-off text box some apps use to rename or confirm something -- used to get an
+  error instead of an answer, and the error killed the rest of that page's script, so the page
+  broke rather than simply going on without a reply. Electron, which Splitser is built on, declines
+  to implement that one dialog; `alert()` and `confirm()` already worked. Splitser now draws the
+  box itself, in its own theme, naming the site that asked. The address shown comes from the pane's
+  real address, not from anything the page says about itself.
+  Only the pane that asked waits for you. Every other pane keeps loading, playing and scrolling,
+  which is the whole point of a tiling browser and is the reason this did not become a single
+  OS-drawn box that stops the entire window. Cancel and Escape both answer the page the way a
+  browser is supposed to -- as a cancel, which is a different thing from an empty answer, and the
+  two are kept apart.
+- **`mailto:` links open your mail program.** Clicking an email address did nothing at all before:
+  the click was swallowed in silence, which looks exactly like a page ignoring you. `tel:` and
+  `sms:` work the same way. Nothing else is handed to the operating system -- the list is a short
+  allowlist rather than "anything that isn't a web address", because handing arbitrary schemes to
+  the OS is how a web page gets to start programs. Repeat clicks are rate-limited, so a page cannot
+  spawn a pile of compose windows.
+
 ## 0.1.45 -- 2026-10-26
 ### Fixed
 - **Tab icons stay put.** A site's icon used to disappear the moment you reloaded the page or

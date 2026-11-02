@@ -1672,6 +1672,51 @@ document.getElementById('cap-close').addEventListener('click', () => { panelCap.
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panelCap.hidden) { panelCap.hidden = true; capShot = null; } });
 
 // HTTP Basic/Digest auth: a site (or dev server) asked for credentials
+// ---- window.prompt() raised by a pane ----
+// The asking pane is parked on a synchronous request in main; every other pane is still live, so
+// this must ALWAYS answer -- a path that forgets to call done() leaves that pane frozen for good.
+// Queued rather than stacked: two panes can ask at once, and two overlapping modals would be both
+// ugly and ambiguous about which one the keyboard is driving.
+const promptQueue = [];
+let promptOpen = false;
+api.onDialogAsk((d) => { promptQueue.push(d); drainPrompts(); });
+function drainPrompts() {
+  if (promptOpen || !promptQueue.length) return;
+  promptOpen = true;
+  showPromptDialog(promptQueue.shift(), () => { promptOpen = false; drainPrompts(); });
+}
+function showPromptDialog(d, after) {
+  const modal = document.createElement('div');
+  modal.className = 'auth-modal';
+  // Name the origin that asked, exactly as the auth dialog does, and take it from main (which read
+  // the guest's committed URL) rather than from the page, which could claim to be anyone.
+  modal.innerHTML = '<div class="auth-box">' +
+    '<div class="auth-h">' + (d.origin ? esc(d.origin) + ' says' : 'This page says') + '</div>' +
+    '<div class="prompt-msg">' + esc(d.message || '') + '</div>' +
+    '<input class="auth-in" id="prompt-in" autocomplete="off" spellcheck="false" />' +
+    '<div class="auth-row"><button class="auth-btn primary" id="prompt-ok">OK</button>' +
+    '<button class="auth-btn" id="prompt-cancel">Cancel</button></div></div>';
+  document.body.appendChild(modal);
+  const input = modal.querySelector('#prompt-in');
+  input.value = d.defaultValue || '';
+  input.focus(); input.select();
+  let answered = false;
+  const done = (ok) => {
+    if (answered) return;            // double-click, or Enter landing after a click: answer once
+    answered = true;
+    modal.remove();
+    // null is what the DOM says prompt() returns on cancel; '' is a real, empty answer. Keep them apart.
+    api.dialogAnswer({ id: d.id, value: ok ? input.value : null });
+    after();
+  };
+  modal.querySelector('#prompt-ok').onclick = () => done(true);
+  modal.querySelector('#prompt-cancel').onclick = () => done(false);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); done(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); done(false); }
+  });
+}
+
 api.onHttpAuth((d) => showAuthDialog(d));
 function showAuthDialog(d) {
   document.querySelectorAll('.auth-modal').forEach((m) => m.remove());

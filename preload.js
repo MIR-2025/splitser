@@ -31,6 +31,10 @@ contextBridge.exposeInMainWorld('splitAPI', {
   shieldsToggleSite: (host) => ipcRenderer.invoke('shields:toggleSite', host),
   shieldsToggleAll: () => ipcRenderer.invoke('shields:toggleAll'),
 
+  // window.prompt() raised by a pane: main asks here, we answer by id ({ id, value }; null = cancel)
+  onDialogAsk: (cb) => ipcRenderer.on('dialog:ask', (_e, d) => cb(d)),
+  dialogAnswer: (r) => ipcRenderer.send('dialog:answer', r),
+
   // HTTP auth dialog reply ({ id, username, password }; username null = cancel)
   httpAuthReply: (r) => ipcRenderer.send('http-auth-reply', r),
 
