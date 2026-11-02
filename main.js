@@ -67,19 +67,20 @@ protocol.registerSchemesAsPrivileged([{
 let dialogSeq = 0;
 const pendingDialogs = new Map();   // request id -> resolve(stringOrNull)
 
-function settleDialog(id, value) {
-  const resolve = pendingDialogs.get(id);
-  if (!resolve) return;
+function settleDialog(id, value, mute) {
+  const entry = pendingDialogs.get(id);
+  if (!entry) return;
   pendingDialogs.delete(id);
-  resolve(typeof value === 'string' ? value : null);
+  if (mute && entry.wcId) dialogMuted.add(entry.wcId);
+  entry.resolve(typeof value === 'string' ? value : null);
 }
-ipcMain.on('dialog:answer', (_e, d) => settleDialog(d && d.id, d && d.value));
+ipcMain.on('dialog:answer', (_e, d) => settleDialog(d && d.id, d && d.value, !!(d && d.mute)));
 // Every blocked pane MUST be released. If the host window goes away while a prompt is open,
 // nothing will ever answer it and the guest would sit on its synchronous request until killed.
 // Bound to the HOST window only -- an earlier draft hung this on browser-window-created, which
 // meant closing an unrelated popup (an OAuth window, say) silently cancelled a live prompt in
 // another pane.
-function releaseBlockedPanes() { for (const id of [...pendingDialogs.keys()]) settleDialog(id, null); }
+function releaseBlockedPanes() { for (const id of [...pendingDialogs.keys()]) settleDialog(id, null, false); }
 
 async function handleDialogRequest(request) {
   let body = {};
@@ -87,23 +88,44 @@ async function handleDialogRequest(request) {
   const value = await new Promise((resolve) => {
     // No host UI to ask: answer null, which prompt() reports as a cancel. Never leave it hanging.
     if (!win || win.isDestroyed() || !body || body.kind !== 'prompt') return resolve(null);
+    // Unknown handle -> page script calling the scheme directly rather than through prompt(). Draw
+    // nothing and answer a cancel: the only way to raise a dialog is the real window.prompt.
+    const wcId = dialogNonces.get(String(body.token || ''));
+    if (!wcId) return resolve(null);
+    // The user already said stop. Answer immediately so the page's loop runs to its own end
+    // instead of the pane sitting blocked on a dialog nobody will ever see.
+    if (dialogMuted.has(wcId)) return resolve(null);
+    const n = (dialogCount.get(wcId) || 0) + 1;
+    dialogCount.set(wcId, n);
     const id = ++dialogSeq;
-    pendingDialogs.set(id, resolve);
+    pendingDialogs.set(id, { resolve, wcId });
     win.webContents.send('dialog:ask', {
       id,
       kind: 'prompt',
       message: String(body.message || '').slice(0, 2000),
       defaultValue: String(body.defaultValue || '').slice(0, 2000),
-      // The ORIGIN that asked, shown in the dialog. A page cannot be trusted to say who it is, so
-      // this is taken from the guest's own committed URL via its webContents id -- not from the
-      // body, which is just what the page's renderer claimed.
-      origin: originOfWc(body.wcId)
+      // The ORIGIN that asked. Resolved HERE from the guest's own committed URL, found through the
+      // nonce -- never from the body, which is only what the caller claimed.
+      origin: originOfWc(wcId),
+      // Offer the escape from the second dialog in a run, as Chrome does. Offering it on the first
+      // would put a "make this stop" control in front of someone who has not yet been bothered.
+      offerMute: n >= 2
     });
   });
   return new Response(JSON.stringify({ value }), {
     headers: { 'content-type': 'application/json', 'access-control-allow-origin': '*' }
   });
 }
+// Chrome's "prevent this page from creating additional dialogs", which exists because a page can
+// sit in `while (true) prompt()`. Only the asking pane blocks here, so the loop is survivable --
+// but without an escape the only way out is closing the pane, which costs the user whatever was in
+// it. Counted per pane and reset on a real navigation, so the offer appears in a run of dialogs and
+// a later, innocent one starts clean again.
+const dialogCount = new Map();      // webContents id -> dialogs since the last main-frame navigation
+const dialogMuted = new Set();      // webContents ids the user has told to stop asking
+function forgetDialogState(id) { dialogCount.delete(id); dialogMuted.delete(id); }
+function resetDialogState(id) { dialogCount.delete(id); dialogMuted.delete(id); }
+
 function originOfWc(id) {
   try {
     const wc = Number(id) ? webContents.fromId(Number(id)) : null;
@@ -324,7 +346,20 @@ ipcMain.handle('cert:proceed', (_e, { wcId, host, url }) => {   // user clicked 
 const dlPaths = new Set();   // full paths of files we've saved -- open/reveal is gated to these
 ipcMain.on('app:home', (e) => { e.returnValue = app.getPath('home'); });   // sync home dir for the sandboxed preload
 ipcMain.on('app:version', (e) => { e.returnValue = app.getVersion(); });   // sync app version for the About popover
-ipcMain.on('dialog:whoami', (e) => { e.returnValue = e.sender.id; });   // the guest's own wcId, so main can name the origin that asked
+// A per-guest, unguessable handle. NOT the raw webContents id: the dialog scheme is reachable by
+// the page itself (verified -- a plain fetch() to it from page script opened a dialog), so an id a
+// page could guess let it both spam dialogs without going through prompt() AND choose whose origin
+// the dialog claimed to be, by naming another pane's id. The nonce lives only in the preload's
+// isolated world and is never exposed across contextBridge, so page script cannot read or forge it;
+// a request without a known one is answered null and draws nothing.
+const dialogNonces = new Map();   // nonce -> webContents id
+ipcMain.on('dialog:whoami', (e) => {
+  const nonce = randomBytes(24).toString('hex');
+  const id = e.sender.id;
+  dialogNonces.set(nonce, id);
+  e.sender.once('destroyed', () => { dialogNonces.delete(nonce); forgetDialogState(id); });
+  e.returnValue = nonce;
+});
 ipcMain.on('app:ready', () => {   // renderer restore done -> open this launch's URL
   if (!win || win.isDestroyed()) return;
   if (pendingWorkspace) { win.webContents.send('open-workspace', pendingUrl); pendingWorkspace = false; pendingUrl = ''; return; }
@@ -787,6 +822,7 @@ app.whenReady().then(() => {
     });
     contents.on('did-start-navigation', (_ev, url, isInPlace, isMainFrame) => {   // new page -> reset its block count
       if (isMainFrame && !isInPlace) {
+        resetDialogState(contents.id);   // a new page has not bothered anyone yet -- it gets a clean slate
         blocked.set(contents.id, 0); pushShields(contents.id);
         try { mainNavOrigin.set(contents.id, new URL(url).origin); } catch { mainNavOrigin.delete(contents.id); }   // remember the top-level origin for the HTTP-auth main-frame check
       }

@@ -25,6 +25,18 @@ verification status.
   OS-drawn box that stops the entire window. Cancel and Escape both answer the page the way a
   browser is supposed to -- as a cancel, which is a different thing from an empty answer, and the
   two are kept apart.
+- **A way to stop a page that will not stop asking.** From the second question in a row, the box
+  carries "Stop this page asking again". Tick it -- on either button -- and that page gets no more
+  dialogs until you go somewhere else; it is told you cancelled, which is an answer it already
+  knows how to handle, so a page stuck in a loop runs itself out instead of leaving the pane
+  waiting. Moving to a different page clears it, so a later, innocent question still gets asked.
+### Fixed
+- **A page could not raise a dialog by itself, or put somebody else's address on one.** The
+  internal channel the dialog uses turned out to be reachable from ordinary page script, which
+  meant a page could open dialogs without going anywhere near `prompt()` -- and choose which site
+  the box claimed to be from, including another pane's. It now only answers a handle the page
+  cannot see or guess; anything else is turned away without drawing a thing. Introduced earlier in
+  this same unreleased batch, so no released build was ever affected.
 - **`mailto:` links open your mail program.** Clicking an email address did nothing at all before:
   the click was swallowed in silence, which looks exactly like a page ignoring you. `tel:` and
   `sms:` work the same way. Nothing else is handed to the operating system -- the list is a short

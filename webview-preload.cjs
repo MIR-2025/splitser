@@ -299,7 +299,10 @@ try {
 // The sync XHR is what actually blocks, and it blocks only THIS renderer -- main answers it from
 // a promise, so every other pane keeps running. Sync XHR on the main thread is deprecated and
 // that is fine: a modal prompt is the one case where blocking the page is the correct behaviour.
-const MY_WC_ID = (() => { try { return ipcRenderer.sendSync('dialog:whoami'); } catch (e) { return 0; } })();
+// An unguessable per-guest handle from main. It stays in this isolated world and is never put on
+// the contextBridge, so page script cannot read it -- which is what stops a page calling the dialog
+// scheme itself to spam dialogs or to caption one with somebody else's origin.
+const DIALOG_TOKEN = (() => { try { return ipcRenderer.sendSync('dialog:whoami'); } catch (e) { return ''; } })();
 try {
   contextBridge.exposeInMainWorld('__splitserDialogBridge', {
     prompt(message, defaultValue) {
@@ -309,7 +312,7 @@ try {
         xhr.setRequestHeader('content-type', 'application/json');
         xhr.send(JSON.stringify({
           kind: 'prompt',
-          wcId: MY_WC_ID,
+          token: DIALOG_TOKEN,
           message: String(message == null ? '' : message).slice(0, 2000),
           defaultValue: String(defaultValue == null ? '' : defaultValue).slice(0, 2000),
           origin: location.origin

@@ -1694,6 +1694,10 @@ function showPromptDialog(d, after) {
     '<div class="auth-h">' + (d.origin ? esc(d.origin) + ' says' : 'This page says') + '</div>' +
     '<div class="prompt-msg">' + esc(d.message || '') + '</div>' +
     '<input class="auth-in" id="prompt-in" autocomplete="off" spellcheck="false" />' +
+    // Offered only from the second dialog in a run (main decides), because a page can loop on
+    // prompt() and the pane stays blocked until it is answered each time.
+    (d.offerMute ? '<label class="prompt-mute"><input type="checkbox" id="prompt-mute" />' +
+      'Stop this page asking again</label>' : '') +
     '<div class="auth-row"><button class="auth-btn primary" id="prompt-ok">OK</button>' +
     '<button class="auth-btn" id="prompt-cancel">Cancel</button></div></div>';
   document.body.appendChild(modal);
@@ -1706,7 +1710,10 @@ function showPromptDialog(d, after) {
     answered = true;
     modal.remove();
     // null is what the DOM says prompt() returns on cancel; '' is a real, empty answer. Keep them apart.
-    api.dialogAnswer({ id: d.id, value: ok ? input.value : null });
+    // The checkbox is honoured on EITHER button: someone ticking "stop asking" and then hitting
+    // Cancel plainly means stop, and making them press OK to be left alone would be absurd.
+    const mute = !!(modal.querySelector('#prompt-mute') || {}).checked;
+    api.dialogAnswer({ id: d.id, value: ok ? input.value : null, mute });
     after();
   };
   modal.querySelector('#prompt-ok').onclick = () => done(true);
